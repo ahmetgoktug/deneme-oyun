@@ -1,0 +1,59 @@
+# ---------------------------------------------------
+# Unity tarafindan uretilen, repoya girmemesi gereken klasorler
+# Bunlar her makinede yeniden uretilir. Commit edilirse
+# surekli cakisma ve gereksiz dosya trafigi olur.
+# ---------------------------------------------------
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Asset Store'dan inen gecici dosyalar
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# Visual Studio / Rider / VS Code proje dosyalari (otomatik uretilir)
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Derlenmis ciktilar
+*.apk
+*.aab
+*.unitypackage
+*.app
+ExportedObj/
+*.exe
+*.dmg
+
+# Crash raporlari
+sysinfo.txt
+crashlytics-build.properties
+
+# Gradle / Android
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# OS dosyalari
+.DS_Store
+Thumbs.db
+desktop.ini
