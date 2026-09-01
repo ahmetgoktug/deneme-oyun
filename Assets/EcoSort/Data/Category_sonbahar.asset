@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c633c6343621fbb4985d85b7d5f4e555, type: 3}
+  m_Name: Category_sonbahar
+  m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CategoryData
+  _categoryId: sonbahar
+  _displayName: Sonbahar
+  _icon: {fileID: 0}
+  _accentColor: {r: 0.85, g: 0.52, b: 0.22, a: 1}
+  _requiredCardCount: 3
+  _cards:
+  - {fileID: 11400000, guid: f0ebef680a411c648a719d3bce340368, type: 2}
+  - {fileID: 11400000, guid: d1b6d71e71633e64a898f8b75d5f2cc1, type: 2}
+  - {fileID: 11400000, guid: a2c675d4a9ce4b74ab67e3ca0a22c43f, type: 2}
+  _completeVfxPrefab: {fileID: 0}
+  _cardAcceptedSfx: {fileID: 0}
+  _completeSfx: {fileID: 0}
+  _sfxVolume: 0.85
+  _completeMessage: Sonbahar Geldi
