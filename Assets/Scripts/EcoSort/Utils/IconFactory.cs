@@ -14,7 +14,17 @@ namespace EcoSort.Utils
         Scarf,     // atki
         Wave,      // dalga
         Shell,     // deniz kabugu
-        Bird       // marti
+        Bird,      // marti
+
+        // --- 5 kategoriye gecisle eklenenler (siralama bozulmasin diye sona eklendi)
+        Umbrella,     // plaj semsiyesi
+        Necklace,     // kolye
+        Bracelet,     // bileklik
+        Ring,         // yuzuk
+        Gamepad,      // oyun kolu
+        Headphones,   // kulaklik
+        Keyboard,     // klavye
+        Sparkle       // slot amblemi / genel yildiz
     }
 
     /// <summary>
@@ -40,6 +50,88 @@ namespace EcoSort.Utils
 
             Cache[key] = sprite;
             return sprite;
+        }
+
+        /// <summary>
+        /// Elle cizilmis kart gorseli olmayan kartlar icin "kendi zeminini tasiyan"
+        /// bir kart yuzu uretir: yuvarlak kare, kategori renginde dikey gradyan,
+        /// ic kenar isigi ve uzerinde acik renkli siluet.
+        ///
+        /// Boylece gecici kartlar, sanatcinin cizdigi kartlarla ayni siluete oturur;
+        /// gercek gorsel gelince CardData.Artwork doldurulur ve bu uretim devre disi kalir.
+        /// </summary>
+        public static Sprite GetCardTile(EcoIcon icon, Color accent, int size = 256)
+        {
+            string key = "tile_" + icon + "_" + ColorKey(accent) + "_" + size;
+            if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            var texture = CreateTileTexture(icon, accent, size);
+            var sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f),
+                100f, 0, SpriteMeshType.FullRect);
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+
+            Cache[key] = sprite;
+            return sprite;
+        }
+
+        /// <summary>Kart yuzunu doku olarak uretir (PNG'ye yazmak isteyen editor kodu icin).</summary>
+        public static Texture2D CreateTileTexture(EcoIcon icon, Color accent, int size = 256)
+        {
+            size = Mathf.Clamp(size, 32, 1024);
+
+            var texture = NewTexture(size);
+            var pixels = new Color32[size * size];
+            float half = size * 0.5f;
+
+            // Zemin gradyani: ustte acilmis, altta koyulmus kategori rengi.
+            var top = Color.Lerp(accent, Color.white, 0.46f);
+            var bottom = Color.Lerp(accent, Color.black, 0.16f);
+            var silhouette = Color.Lerp(accent, Color.white, 0.94f);
+            var silhouetteShadow = Color.Lerp(accent, Color.black, 0.42f);
+
+            // Ikonu karenin icine sigdirmak icin kucult (1 = tam kenar).
+            const float iconScale = 1.42f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    var p = new Vector2((x + 0.5f - half) / half, (y + 0.5f - half) / half);
+
+                    // --- kart govdesi (yuvarlak kare)
+                    float tileDistance = RoundedBox(p, new Vector2(0.965f, 0.965f), 0.30f);
+                    float tileAlpha = Mathf.Clamp01(0.5f - tileDistance * half);
+                    if (tileAlpha <= 0f)
+                    {
+                        pixels[y * size + x] = new Color32(0, 0, 0, 0);
+                        continue;
+                    }
+
+                    var color = Color.Lerp(bottom, top, (p.y + 1f) * 0.5f);
+
+                    // --- ic kenar isigi: govdenin hemen icinde ince bir halka
+                    float rimPixels = tileDistance * half;
+                    float rim = Mathf.Clamp01(1f - Mathf.Abs(rimPixels + size * 0.028f) / (size * 0.020f));
+                    color = Color.Lerp(color, Color.white, rim * 0.30f);
+
+                    // --- siluetin altina yumusak golge: ikon zeminden kalksin
+                    float shadowDistance = Evaluate(icon, (p - new Vector2(0f, -0.045f)) * iconScale);
+                    float shadowAlpha = Mathf.Clamp01(0.5f - shadowDistance * half / iconScale);
+                    color = Color.Lerp(color, silhouetteShadow, shadowAlpha * 0.30f);
+
+                    // --- siluet
+                    float iconDistance = Evaluate(icon, p * iconScale);
+                    float iconAlpha = Mathf.Clamp01(0.5f - iconDistance * half / iconScale);
+                    color = Color.Lerp(color, silhouette, iconAlpha);
+
+                    color.a = tileAlpha;
+                    pixels[y * size + x] = color;
+                }
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            return texture;
         }
 
         /// <summary>Ikonu doku olarak uretir. PNG'ye cevirmek isteyen editor kodu bunu kullanir.</summary>
@@ -91,6 +183,14 @@ namespace EcoSort.Utils
                 case EcoIcon.Wave: return Wave(p);
                 case EcoIcon.Shell: return Shell(p);
                 case EcoIcon.Bird: return Bird(p);
+                case EcoIcon.Umbrella: return Umbrella(p);
+                case EcoIcon.Necklace: return Necklace(p);
+                case EcoIcon.Bracelet: return Bracelet(p);
+                case EcoIcon.Ring: return Ring(p);
+                case EcoIcon.Gamepad: return Gamepad(p);
+                case EcoIcon.Headphones: return Headphones(p);
+                case EcoIcon.Keyboard: return Keyboard(p);
+                case EcoIcon.Sparkle: return Sparkle(p);
                 default: return Circle(p, 0.6f);
             }
         }
@@ -211,6 +311,169 @@ namespace EcoSort.Utils
             right = Mathf.Max(right, baseY - p.y);
 
             return Union(left, right);
+        }
+
+        /// <summary>Plaj semsiyesi: kubbe + fistolu etek + direk.</summary>
+        static float Umbrella(Vector2 p)
+        {
+            var c = new Vector2(0f, -0.16f);
+
+            // Kubbe: genis elipsin ust yarisi.
+            float canopy = Ellipse(p - c, new Vector2(0.88f, 0.60f));
+            canopy = Mathf.Max(canopy, c.y - p.y);
+
+            // Etek: alt kenardan cikarilan daireler klasik semsiye fistosunu verir.
+            for (int i = -2; i <= 2; i++)
+                canopy = Subtract(canopy, Circle(p - new Vector2(i * 0.355f, c.y - 0.03f), 0.165f));
+
+            float pole = RoundedBox(p - new Vector2(0f, -0.54f), new Vector2(0.048f, 0.40f), 0.045f);
+            float knob = Circle(p - new Vector2(0f, 0.46f), 0.08f);
+
+            return Union(Union(canopy, pole), knob);
+        }
+
+        /// <summary>Kolye: acik ust uclu zincir yayi + damla ucluk.</summary>
+        static float Necklace(Vector2 p)
+        {
+            var c = new Vector2(0f, 0.32f);
+
+            float chain = Annulus(p - c, 0.60f, 0.055f);
+            chain = Mathf.Max(chain, p.y - (c.y + 0.12f));   // ust ucu acik biraksin
+
+            float bulb = Circle(p - new Vector2(0f, -0.46f), 0.20f);
+            float tip = Circle(p - new Vector2(0f, -0.24f), 0.065f);
+            float pendant = SmoothUnion(bulb, tip, 0.17f);
+
+            return Union(chain, pendant);
+        }
+
+        /// <summary>
+        /// Bileklik: halka seklinde dizilmis ayri boncuklar.
+        /// Yuzukten ilk bakista ayrilsin diye duz bant yerine boncuk zinciri.
+        /// </summary>
+        static float Bracelet(Vector2 p)
+        {
+            const int beadCount = 10;
+            const float ringRadius = 0.60f;
+
+            float shape = 10f;
+            for (int i = 0; i < beadCount; i++)
+            {
+                float angle = i * (360f / beadCount) * Mathf.Deg2Rad;
+                var center = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * ringRadius;
+                // Bir boncuk digerlerinden buyuk: takiya odak noktasi verir.
+                float radius = i == beadCount / 4 ? 0.24f : 0.155f;
+                shape = Union(shape, Circle(p - center, radius));
+            }
+
+            return shape;
+        }
+
+        /// <summary>Yuzuk: ince bant + tepesinde belirgin baklava kesim tas.</summary>
+        static float Ring(Vector2 p)
+        {
+            // Bant, tasin altinda kalsin diye asagi kaydirilmis ve inceltilmis.
+            float band = Annulus(p - new Vector2(0f, -0.34f), 0.46f, 0.075f);
+
+            // Tas: 45 derece dondurulmus buyuk baklava.
+            var q = Rotate(p - new Vector2(0f, 0.42f), 45f);
+            float gem = RoundedBox(q, new Vector2(0.30f, 0.30f), 0.05f);
+
+            // Tasi tutan tirnaklar: bantla tasi gorsel olarak birlestirir.
+            float prongL = Segment(p, new Vector2(-0.26f, 0.16f), new Vector2(-0.34f, -0.10f), 0.045f);
+            float prongR = Segment(p, new Vector2(0.26f, 0.16f), new Vector2(0.34f, -0.10f), 0.045f);
+
+            return Union(Union(band, gem), Union(prongL, prongR));
+        }
+
+        /// <summary>Oyun kolu: govde + iki tutamak, uzerinde d-pad ve tus oyuklari.</summary>
+        static float Gamepad(Vector2 p)
+        {
+            float body = RoundedBox(p - new Vector2(0f, 0.04f), new Vector2(0.52f, 0.28f), 0.20f);
+            float gripL = Circle(p - new Vector2(-0.54f, -0.12f), 0.29f);
+            float gripR = Circle(p - new Vector2(0.54f, -0.12f), 0.29f);
+
+            float shape = SmoothUnion(SmoothUnion(body, gripL, 0.20f), gripR, 0.20f);
+
+            // Sol tarafta arti seklinde yon tusu.
+            var dpad = new Vector2(-0.38f, 0.06f);
+            float horizontal = RoundedBox(p - dpad, new Vector2(0.19f, 0.058f), 0.028f);
+            float vertical = RoundedBox(p - dpad, new Vector2(0.058f, 0.19f), 0.028f);
+            shape = Subtract(shape, Union(horizontal, vertical));
+
+            // Sagda iki yuvarlak aksiyon tusu.
+            shape = Subtract(shape, Circle(p - new Vector2(0.30f, 0.17f), 0.085f));
+            shape = Subtract(shape, Circle(p - new Vector2(0.49f, -0.01f), 0.085f));
+
+            return shape;
+        }
+
+        /// <summary>Kulaklik: ust kemer yayi + iki kulak yastigi.</summary>
+        static float Headphones(Vector2 p)
+        {
+            const float baseY = 0.0f;
+
+            float band = Annulus(p - new Vector2(0f, baseY), 0.62f, 0.085f);
+            band = Mathf.Max(band, baseY - p.y);   // sadece ust yari
+
+            float cupL = RoundedBox(p - new Vector2(-0.62f, -0.30f), new Vector2(0.165f, 0.28f), 0.145f);
+            float cupR = RoundedBox(p - new Vector2(0.62f, -0.30f), new Vector2(0.165f, 0.28f), 0.145f);
+
+            return Union(band, Union(cupL, cupR));
+        }
+
+        /// <summary>Klavye: govdeden oyulmus iki sira tus + bosluk cubugu.</summary>
+        static float Keyboard(Vector2 p)
+        {
+            float body = RoundedBox(p, new Vector2(0.90f, 0.50f), 0.13f);
+
+            // Uzak baslangic degeri: Union(min) ile ilk gercek tus kazansin.
+            float keys = 10f;
+
+            for (int row = 0; row < 2; row++)
+            {
+                float y = 0.26f - row * 0.25f;
+                for (int col = 0; col < 5; col++)
+                {
+                    float x = -0.60f + col * 0.30f;
+                    keys = Union(keys, RoundedBox(p - new Vector2(x, y), new Vector2(0.105f, 0.08f), 0.032f));
+                }
+            }
+
+            keys = Union(keys, RoundedBox(p - new Vector2(0f, -0.26f), new Vector2(0.42f, 0.08f), 0.032f));
+
+            return Subtract(body, keys);
+        }
+
+        /// <summary>Dort kollu parilti: kutlama ve slot amblemi icin.</summary>
+        static float Sparkle(Vector2 p)
+        {
+            // Iki elipsin birlesimi carpi yerine yumusak bir yildiz verir.
+            float vertical = Ellipse(p, new Vector2(0.17f, 0.92f));
+            float horizontal = Ellipse(p, new Vector2(0.92f, 0.17f));
+            float core = Circle(p, 0.20f);
+
+            return SmoothUnion(SmoothUnion(vertical, horizontal, 0.10f), core, 0.10f);
+        }
+
+        // ---------------------------------------------------------------- doku yardimcilari
+
+        static Texture2D NewTexture(int size)
+        {
+            return new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                // Onbellekteki sprite'lar sahne degisiminde bosaltilmasin.
+                hideFlags = HideFlags.HideAndDontSave,
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+        }
+
+        /// <summary>Onbellek anahtari icin rengin kisa, kararli bir temsili.</summary>
+        static string ColorKey(Color color)
+        {
+            var c = (Color32)color;
+            return $"{c.r:x2}{c.g:x2}{c.b:x2}";
         }
 
         // ---------------------------------------------------------------- SDF araclari

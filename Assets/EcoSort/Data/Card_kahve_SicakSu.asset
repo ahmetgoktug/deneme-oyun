@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Card_kahve_SicakSu
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CardData
   _cardId: kahve_sicaksu
-  _displayName: Sicak Su
+  _displayName: French Press
   _artwork: {fileID: 21300000, guid: bfd4f99593133104997d17f155d57b18, type: 3}
+  _iconShape: 1
   _tint: {r: 1, g: 1, b: 1, a: 1}
   _category: {fileID: 11400000, guid: acae216b01c84654c92d4f6a8c288ffd, type: 2}
+  _categoryKind: 2
   _hint: 

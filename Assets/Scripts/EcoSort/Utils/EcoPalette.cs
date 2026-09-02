@@ -17,6 +17,15 @@ namespace EcoSort.Utils
 
         public static readonly Color Shadow = new Color(0.36f, 0.29f, 0.22f, 0.20f);
 
+        /// <summary>Kartlarin durdugu alt tepsinin zemini: zeminden bir ton koyu.</summary>
+        public static readonly Color TrayFill = new Color(0.85f, 0.78f, 0.68f, 0.40f);
+
+        /// <summary>Bos kart yuvasinin soluk izi.</summary>
+        public static readonly Color SocketGhost = new Color(0.62f, 0.54f, 0.45f, 0.14f);
+
+        /// <summary>Basari vurgusu (tamamlanan grup rozeti, bitis banneri).</summary>
+        public static readonly Color Success = Hex(0x6FBF87);
+
         public static Color Hex(uint rgb)
         {
             return new Color(

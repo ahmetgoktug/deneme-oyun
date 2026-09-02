@@ -55,9 +55,26 @@ namespace EcoSort.Core
         int _combo;
         float _lastMatchTime = -999f;
 
+        // Bitis olayi birden fazla yoldan tetiklenebiliyor (son kart kabul edildi /
+        // kutlama animasyonu bitti). Tek sefer yayinlandigindan emin oluyoruz.
+        bool _boardClearedRaised;
+
         public int Combo => _combo;
         public int RemainingCards => _boardCards.Count;
         public IReadOnlyCollection<CardView> BoardCards => _boardCards;
+        public IReadOnlyCollection<CategorySlotView> Slots => _slots.Values;
+
+        /// <summary>Kayitli tum slotlar tamamlandi mi?</summary>
+        public bool AllSlotsComplete
+        {
+            get
+            {
+                if (_slots.Count == 0) return false;
+                foreach (var slot in _slots.Values)
+                    if (slot == null || !slot.IsComplete) return false;
+                return true;
+            }
+        }
 
         // ---------------------------------------------------------------- yasam dongusu
 
@@ -117,7 +134,15 @@ namespace EcoSort.Core
         {
             if (card == null) return;
             if (_boardCards.Remove(card) && _boardCards.Count == 0)
-                BoardCleared?.Invoke();
+                RaiseBoardCleared();
+        }
+
+        /// <summary>Bitis olayini en fazla bir kez yayinlar.</summary>
+        void RaiseBoardCleared()
+        {
+            if (_boardClearedRaised) return;
+            _boardClearedRaised = true;
+            BoardCleared?.Invoke();
         }
 
         /// <summary>Verilen kategoriye hizmet eden slotu dondurur (yoksa null).</summary>
@@ -127,13 +152,32 @@ namespace EcoSort.Core
             return _slots.TryGetValue(category, out var slot) ? slot : null;
         }
 
+        /// <summary>
+        /// Kartin gitmesi gereken slotu bulur. Once CategoryData referansina bakar;
+        /// referans kopmussa (asset silinmis/tasinmis) enum uzerinden esler.
+        /// </summary>
+        public CategorySlotView ResolveSlot(CardData card)
+        {
+            if (card == null) return null;
+
+            var direct = ResolveSlot(card.Category);
+            if (direct != null) return direct;
+
+            if (card.Kind == CategoryKind.None) return null;
+
+            foreach (var pair in _slots)
+                if (pair.Key != null && pair.Key.Kind == card.Kind) return pair.Value;
+
+            return null;
+        }
+
         // ---------------------------------------------------------------- kural motoru
 
         /// <summary>Kart bu slota konabilir mi? (animasyon oynatmaz, sadece sorar)</summary>
         public bool CanPlace(CardView card, CategorySlotView slot)
         {
             if (card == null || slot == null || card.Data == null) return false;
-            if (slot.IsComplete) return false;
+            if (slot.IsComplete || slot.IsCleared) return false;
             return card.Data.BelongsTo(slot.Category);
         }
 
@@ -168,10 +212,10 @@ namespace EcoSort.Core
                 return false;
             }
 
-            var slot = ResolveSlot(dragged.Data.Category);
-            if (slot == null || slot.IsComplete)
+            var slot = ResolveSlot(dragged.Data);
+            if (!CanPlace(dragged, slot))
             {
-                // Grubu toplayacak bir slot yoksa eslesmeyi tamamlayamayiz.
+                // Grubu toplayacak (ve hala yer olan) bir slot yoksa eslesmeyi tamamlayamayiz.
                 Reject(dragged);
                 return false;
             }
@@ -187,8 +231,8 @@ namespace EcoSort.Core
         {
             if (card == null || card.Data == null) return false;
 
-            var slot = ResolveSlot(card.Data.Category);
-            if (slot == null || slot.IsComplete)
+            var slot = ResolveSlot(card.Data);
+            if (!CanPlace(card, slot))
             {
                 Reject(card);
                 return false;
@@ -229,7 +273,7 @@ namespace EcoSort.Core
             // Slot kutlamayi oynatir ve kartlari yok eder; bitince tahtayi kontrol ederiz.
             slot.PlayCompleteAndClear(() =>
             {
-                if (_boardCards.Count == 0) BoardCleared?.Invoke();
+                if (_boardCards.Count == 0) RaiseBoardCleared();
             });
         }
 

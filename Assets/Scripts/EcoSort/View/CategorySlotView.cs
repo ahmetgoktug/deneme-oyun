@@ -15,11 +15,13 @@ namespace EcoSort.View
     /// Bir tematik grubun toplandigi yuva. Uzerine dogru kart birakildikca doldurur,
     /// hedefe ulasinca kutlama efektini oynatip kartlari panodan siler.
     ///
-    /// Sahne kurulumu:
-    ///   Slot (RectTransform + Image[raycast target] + CategorySlotView)
-    ///     +- Icon / Title / Progress
+    /// Sahne kurulumu (SlotManager bunu calisma zamaninda da kurabilir):
+    ///   Slot (RectTransform + Image[raycast target] + LayoutElement + CategorySlotView)
     ///     +- Glow      : Image (tamamlaninca parlar)
+    ///     +- Emblem    : Image (kategori amblemi, filigran)
     ///     +- CardsRoot : RectTransform (kabul edilen kartlar buraya tasinir)
+    ///     +- Pips      : HorizontalLayoutGroup (ilerleme noktalari)
+    ///     +- Title     : TMP_Text / Text
     /// </summary>
     [RequireComponent(typeof(RectTransform))]
     [DisallowMultipleComponent]
@@ -43,6 +45,9 @@ namespace EcoSort.View
         [SerializeField] Vector2 _cardStackOffset = new Vector2(16f, -14f);
         [Tooltip("Her kart icin uygulanan hafif egim (derece). Elde tutulan deste hissi verir.")]
         [SerializeField] float _cardTiltStep = 2.5f;
+        [Tooltip("Slota giren kartin kucultulme orani. 5 slotlu dar duzende kartlar " +
+                 "slotun disina tasmasin diye kullanilir.")]
+        [SerializeField, Range(0.15f, 1f)] float _acceptedCardScale = 0.34f;
 
         [Header("Tamamlanma")]
         [Tooltip("Kartlarin tek tek silinmesi arasindaki gecikme. Tatmin edici zincir hissi.")]
@@ -50,8 +55,10 @@ namespace EcoSort.View
         [SerializeField] Transform _vfxAnchor;
 
         readonly List<CardView> _cards = new List<CardView>();
+        readonly List<Image> _pips = new List<Image>();
 
         RectTransform _rect;
+        Image _completeBadge;
         bool _cleared;
 
         public CategoryData Category => _category;
@@ -59,6 +66,9 @@ namespace EcoSort.View
         public int Required => _category != null ? _category.RequiredCardCount : 0;
         public bool IsComplete => _category != null && _cards.Count >= _category.RequiredCardCount;
         public IReadOnlyList<CardView> Cards => _cards;
+
+        /// <summary>Kutlama efekti oynatildi mi? (Tamamlanan slot tekrar kart almaz.)</summary>
+        public bool IsCleared => _cleared;
 
         RectTransform CardsRoot => _cardsRoot != null ? _cardsRoot : _rect;
 
@@ -99,18 +109,30 @@ namespace EcoSort.View
         /// Gorsel parcalari kod tarafindan baglar (proseduel pano kurucusu icin).
         /// Bind()'dan ONCE cagir; renkler Bind sirasinda uygulanir.
         /// </summary>
-        public void ConfigureVisuals(Image background, Image glow = null, RectTransform cardsRoot = null)
+        public void ConfigureVisuals(Image background, Image glow = null, RectTransform cardsRoot = null,
+            Image emblem = null, Image completeBadge = null)
         {
             _backgroundImage = background;
             _glowImage = glow;
             _cardsRoot = cardsRoot;
+            _iconImage = emblem;
+            _completeBadge = completeBadge;
         }
 
-        /// <summary>Kart yigininin kayma ve egim degerlerini ekran olcusune gore ayarlar.</summary>
-        public void ConfigureLayout(Vector2 stackOffset, float tiltStep)
+        /// <summary>Ilerleme noktalarini (pip) baglar. Sayilari Required kadar olmali.</summary>
+        public void ConfigurePips(IEnumerable<Image> pips)
+        {
+            _pips.Clear();
+            if (pips != null) _pips.AddRange(pips);
+            UpdateProgressVisuals();
+        }
+
+        /// <summary>Kart yigininin kayma, egim ve olcek degerlerini ekran olcusune gore ayarlar.</summary>
+        public void ConfigureLayout(Vector2 stackOffset, float tiltStep, float acceptedCardScale)
         {
             _cardStackOffset = stackOffset;
             _cardTiltStep = tiltStep;
+            _acceptedCardScale = Mathf.Clamp(acceptedCardScale, 0.15f, 1f);
         }
 
         public void Refresh()
@@ -121,30 +143,54 @@ namespace EcoSort.View
 
             if (_iconImage != null)
             {
-                _iconImage.sprite = _category.Icon;
-                _iconImage.enabled = _category.Icon != null;
+                // Kategoriye ozel sprite yoksa amblem siluetiyle bir filigran ciz.
+                _iconImage.sprite = _category.Icon != null
+                    ? _category.Icon
+                    : IconFactory.GetSprite(_category.Emblem);
+                _iconImage.enabled = _iconImage.sprite != null;
             }
 
             if (_backgroundImage != null)
             {
                 // Slot, kategorinin renginin cok soluk bir tonuyla boyanir.
-                var c = _category.AccentColor;
-                _backgroundImage.color = new Color(c.r, c.g, c.b, 0.18f);
+                _backgroundImage.color = _category.AccentColor.WithAlpha(0.18f);
             }
 
             if (_glowImage != null)
             {
                 _glowImage.color = _category.AccentColor;
-                _glowImage.gameObject.SetActive(false);
+                // OnValidate icinden SetActive cagirmak Unity uyarisi uretir; sadece
+                // oyun calisirken gorunurluge dokun.
+                if (Application.isPlaying) _glowImage.gameObject.SetActive(false);
             }
 
-            UpdateProgressLabel();
+            if (_completeBadge != null)
+            {
+                _completeBadge.color = EcoPalette.Success;
+                if (Application.isPlaying) _completeBadge.gameObject.SetActive(false);
+            }
+
+            UpdateProgressVisuals();
         }
 
-        void UpdateProgressLabel()
+        void UpdateProgressVisuals()
         {
-            if (_progressLabel == null || _category == null) return;
-            _progressLabel.text = $"{_cards.Count}/{_category.RequiredCardCount}";
+            if (_category == null) return;
+
+            if (_progressLabel != null)
+                _progressLabel.text = $"{_cards.Count}/{_category.RequiredCardCount}";
+
+            // Pip'ler: dolu olanlar kategori renginde, bos olanlar soluk.
+            // Tamamlanan kategoride kartlar silinse de pip'ler dolu KALIR;
+            // aksi halde biten grup bos bir slot gibi gorunurdu.
+            for (int i = 0; i < _pips.Count; i++)
+            {
+                if (_pips[i] == null) continue;
+                bool filled = _cleared || i < _cards.Count;
+                _pips[i].color = filled
+                    ? _category.AccentColor
+                    : _category.AccentColor.WithAlpha(0.22f);
+            }
         }
 
         // ---------------------------------------------------------------- birakma
@@ -188,10 +234,10 @@ namespace EcoSort.View
             Vector2 target = _cardStackOffset * centered;
 
             card.SetInteractable(false);   // gruba giren kart artik suruklenmez
-            card.PlaceInto(CardsRoot, target);
+            card.PlaceInto(CardsRoot, target, _acceptedCardScale);
             card.Rect.localRotation = Quaternion.Euler(0f, 0f, -_cardTiltStep * centered);
 
-            UpdateProgressLabel();
+            UpdateProgressVisuals();
             EcoTween.Punch(_rect, 0.08f, 0.22f);
         }
 
@@ -208,6 +254,14 @@ namespace EcoSort.View
             }
 
             _cleared = true;
+
+            if (!gameObject.activeInHierarchy)
+            {
+                // Nesne kapaliysa coroutine baslamaz; akis tikanmasin.
+                onComplete?.Invoke();
+                return;
+            }
+
             StartCoroutine(CompleteRoutine(onComplete));
         }
 
@@ -252,12 +306,25 @@ namespace EcoSort.View
             while (remaining > 0) yield return null;
 
             _cards.Clear();
-            UpdateProgressLabel();
+            UpdateProgressVisuals();
+
+            // Tamamlandi rozetini ac ve slotu dolgun renge cek.
+            // Amblem filigrani rozete yer acsin.
+            if (_iconImage != null) _iconImage.enabled = false;
+
+            if (_completeBadge != null)
+            {
+                _completeBadge.gameObject.SetActive(true);
+                EcoTween.Scale(_completeBadge.transform, Vector3.one, 0.28f, EcoEase.OutBack);
+            }
+
+            if (_backgroundImage != null && _category != null)
+                _backgroundImage.color = _category.AccentColor.WithAlpha(0.42f);
 
             if (_glowImage != null)
             {
                 var glowGroup = _glowImage.GetComponent<CanvasGroup>();
-                if (glowGroup != null) EcoTween.Fade(glowGroup, 0f, 0.35f);
+                if (glowGroup != null) EcoTween.Fade(glowGroup, 0.45f, 0.35f);
             }
 
             onComplete?.Invoke();
@@ -265,9 +332,20 @@ namespace EcoSort.View
 
         void SpawnCompleteVfx()
         {
-            if (_category == null || _category.CompleteVfxPrefab == null) return;
+            if (_category == null) return;
 
             var anchor = _vfxAnchor != null ? _vfxAnchor : transform;
+
+            // Sanat asseti yoksa proseduel konfeti: kurulum gerektirmez.
+            if (_category.CompleteVfxPrefab == null)
+            {
+                var layer = GetComponentInParent<Canvas>();
+                if (layer != null)
+                    EcoConfetti.Burst((RectTransform)anchor, (RectTransform)layer.rootCanvas.transform,
+                        _category.AccentColor, 22, _rect.rect.width * 0.75f);
+                return;
+            }
+
             var fx = Instantiate(_category.CompleteVfxPrefab, anchor.position, Quaternion.identity, anchor);
 
             // FX kendi omrunu yonetmiyorsa makul bir sure sonra temizle.

@@ -75,6 +75,28 @@ namespace EcoSort.Utils
             return sprite;
         }
 
+        /// <summary>
+        /// Merkezden disari yumusakca sonen radyal isik. Slot seridinin arkasina
+        /// konunca ekranin ustune dogal bir "sahne isigi" verir.
+        /// </summary>
+        public static Sprite RadialGlow(int size = 128)
+        {
+            size = Mathf.Clamp(size, 16, 512);
+            string key = "glow_" + size;
+            if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            var sprite = Build(size, (px, py, half) =>
+            {
+                float distance = Mathf.Sqrt(px * px + py * py) / half;
+                // smoothstep benzeri egri: merkezde dolu, kenarda tam saydam.
+                float a = Mathf.Clamp01(1f - distance);
+                return a * a * (3f - 2f * a) * 0.5f;
+            }, 0);
+
+            Cache[key] = sprite;
+            return sprite;
+        }
+
         /// <summary>Dikey gradyan zemin. Image.type = Simple, stretch ile kullan.</summary>
         public static Sprite VerticalGradient(Color bottom, Color top, int height = 256)
         {

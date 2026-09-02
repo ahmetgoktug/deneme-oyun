@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using EcoSort.Data;
 using EcoSort.Utils;
@@ -9,31 +10,40 @@ namespace EcoSort.Core
 {
     /// <summary>
     /// Panoyu calisma zamaninda kuran mobil (portrait) duzen.
-    /// Tum olculer ekran genisligine oranla hesaplanir; 9:16'dan 9:21'e kadar
-    /// farkli telefon oranlarinda ayni duzen korunur.
     ///
-    /// Gecici bir kurucudur: gercek bolum akisi ileride LevelData + BoardBuilder
-    /// ile gelecek, ama olculendirme mantigi oraya tasinabilir.
+    /// Yapisi:
+    ///   Canvas
+    ///     +- Background   : gradyan + slot seridinin arkasinda yumusak isik
+    ///     +- SafeArea     : SafeAreaFitter
+    ///         +- Header   : baslik, durum metni, tamamlanan grup sayaci
+    ///         +- SlotRow  : SlotManager -> HorizontalLayoutGroup + 5 kategori slotu
+    ///         +- CardTray : CardTray    -> GridLayoutGroup + 15 kart yuvasi
+    ///     +- DragLayer    : suruklenen kart ve konfeti burada cizilir
     ///
-    /// Kurulum: sahnede Canvas + EventSystem + CategoryManager olsun, bu bileseni de
-    /// CategoryManager ile ayni GameObject'e ekleyip _categories listesini doldur.
+    /// Tum olculer guvenli alanin genisligine oranla hesaplanir; 9:16'dan 9:21'e
+    /// kadar farkli telefon oranlarinda ayni duzen korunur.
+    ///
+    /// Kurulum: sahnede Canvas + EventSystem olsun; bu bileseni CategoryManager ile
+    /// ayni GameObject'e ekleyip _categories listesini doldur.
     /// </summary>
     [RequireComponent(typeof(CategoryManager))]
     public class SandboxBoard : MonoBehaviour
     {
         [Header("Icerik")]
+        [Tooltip("Ust seritteki kategoriler (soldan saga). Bes kategori beklenir.")]
         [SerializeField] List<CategoryData> _categories = new List<CategoryData>();
 
         [Header("Sahne")]
         [Tooltip("Bos birakilirsa sahnedeki ilk Canvas kullanilir.")]
         [SerializeField] Canvas _canvas;
 
-        [Header("Duzen (ekran genisligine orani)")]
+        [Header("Duzen (guvenli alan genisligine orani)")]
         [Tooltip("Kenar bosluklari.")]
-        [SerializeField, Range(0.02f, 0.10f)] float _paddingRatio = 0.045f;
+        [SerializeField, Range(0.02f, 0.10f)] float _paddingRatio = 0.040f;
         [Tooltip("Ogeler arasi bosluk.")]
-        [SerializeField, Range(0.01f, 0.06f)] float _gapRatio = 0.022f;
-        [SerializeField, Range(2, 5)] int _columns = 3;
+        [SerializeField, Range(0.01f, 0.06f)] float _gapRatio = 0.020f;
+        [Tooltip("Alt tepside satirdaki kart sayisi.")]
+        [SerializeField, Range(2, 6)] int _cardColumns = 4;
 
         [Header("Kart Gorunumu")]
         [Tooltip("Ikonun altinda kart adini da goster. Ikonlar tek basina okunmuyorsa ac.")]
@@ -41,38 +51,29 @@ namespace EcoSort.Core
 
         [Tooltip("Ikon kendi cercevesini/zeminini tasiyorsa ac: arkadaki kategori renkli disk " +
                  "cizilmez ve ikon karti neredeyse tamamen doldurur. Siluet ikonlarda kapali birak.")]
-        [SerializeField] bool _iconHasOwnBackdrop;
+        [SerializeField] bool _iconHasOwnBackdrop = true;
 
         [Header("Test")]
         [SerializeField] bool _shuffle = true;
-        [SerializeField] int _randomSeed = 0;
+        [SerializeField] int _randomSeed;
 
         CategoryManager _manager;
-        RectTransform _safeArea;
-        RectTransform _slotsRoot;
-        RectTransform _boardRoot;
-        RectTransform _dragLayer;
-        Text _statusLabel;
+        SlotManager _slotManager;
+        CardTray _tray;
 
-        readonly Dictionary<CategoryData, Text> _progressLabels = new Dictionary<CategoryData, Text>();
+        RectTransform _safeArea;
+        RectTransform _dragLayer;
+
+        Text _statusLabel;
+        Text _counterLabel;
+        CanvasGroup _bannerGroup;
+        Text _bannerLabel;
 
         // Olculer (piksel, canvas referans birimi)
         float _safeWidth;
         float _safeHeight;
         float _padding;
         float _gap;
-        float _columnWidth;
-
-        static Font s_font;
-
-        static Font UiFont
-        {
-            get
-            {
-                if (s_font == null) s_font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-                return s_font;
-            }
-        }
 
         // ---------------------------------------------------------------- yasam dongusu
 
@@ -81,39 +82,50 @@ namespace EcoSort.Core
             _manager = GetComponent<CategoryManager>();
         }
 
-        void Start()
+        IEnumerator Start()
         {
-            if (_canvas == null) _canvas = FindFirstObjectByType<Canvas>();
+            if (_canvas == null) _canvas = FindAnyObjectByType<Canvas>();
             if (_canvas == null)
             {
                 Debug.LogError("[EcoSort] Sahnede Canvas yok; pano kurulamiyor.", this);
-                return;
+                yield break;
             }
 
             if (_categories == null || _categories.Count == 0)
             {
                 Debug.LogError("[EcoSort] SandboxBoard'a en az bir CategoryData atanmali.", this);
-                return;
+                yield break;
             }
+
+            // CanvasScaler referans cozunurlugu ilk karede uygulanir. Start icinde
+            // canvasRect.rect okunursa tasarim zamanindaki (cogu zaman 0) olcu gelir
+            // ve tum duzen yanlis olculenir. Bir kare bekleyip kesin olcuyu aliyoruz.
+            yield return null;
+            Canvas.ForceUpdateCanvases();
 
             Measure();
             BuildBackground();
             BuildRoots();
 
-            float slotsBottom = BuildHeaderAndSlots();
-            BuildCards(slotsBottom);
+            float cursorY = BuildHeader();
+            cursorY = BuildSlotRow(cursorY);
+            BuildTray(cursorY);
+            BuildBanner();
 
             Subscribe();
-            SetStatus("Kartlari dogru kategoriye surukle");
+            SetStatus("Kartı doğru kategoriye sürükle");
         }
 
         void OnDestroy()
         {
             if (_manager == null) return;
-            _manager.CategoryProgressChanged -= HandleProgress;
-            _manager.CategoryCompleted -= HandleCompleted;
             _manager.MatchRejected -= HandleRejected;
-            _manager.BoardCleared -= HandleBoardCleared;
+            _manager.ComboChanged -= HandleCombo;
+
+            if (_slotManager == null) return;
+            _slotManager.OnCategoryProgress -= HandleProgress;
+            _slotManager.OnCategoryCompleted -= HandleCompleted;
+            _slotManager.OnAllCategoriesCompleted -= HandleAllCompleted;
         }
 
         // ---------------------------------------------------------------- olculendirme
@@ -124,6 +136,10 @@ namespace EcoSort.Core
             float canvasWidth = canvasRect.rect.width;
             float canvasHeight = canvasRect.rect.height;
 
+            // Emniyet: Canvas henuz olculenmediyse ekran olcusune dus.
+            if (canvasWidth <= 1f) canvasWidth = Screen.width;
+            if (canvasHeight <= 1f) canvasHeight = Screen.height;
+
             // Guvenli alani canvas birimine cevir: centik/gesture cubugu duzeni bozmasin.
             float safeRatioX = Screen.width > 0 ? Screen.safeArea.width / Screen.width : 1f;
             float safeRatioY = Screen.height > 0 ? Screen.safeArea.height / Screen.height : 1f;
@@ -133,151 +149,185 @@ namespace EcoSort.Core
 
             _padding = _safeWidth * _paddingRatio;
             _gap = _safeWidth * _gapRatio;
-            _columnWidth = (_safeWidth - _padding * 2f - _gap * (_columns - 1)) / _columns;
         }
 
-        // ---------------------------------------------------------------- kurulum
+        // ---------------------------------------------------------------- zemin
 
         void BuildBackground()
         {
             var canvasRect = (RectTransform)_canvas.transform;
 
-            var go = new GameObject("Background", typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(canvasRect, false);
-            Stretch(rect);
-            rect.SetAsFirstSibling();
+            var root = EcoUi.FullRect("Background", canvasRect);
+            root.SetAsFirstSibling();
 
-            var image = go.AddComponent<Image>();
-            image.sprite = UiSpriteFactory.VerticalGradient(EcoPalette.BackgroundBottom, EcoPalette.BackgroundTop);
-            image.type = Image.Type.Simple;
-            image.raycastTarget = false;
+            var gradient = root.gameObject.AddComponent<Image>();
+            gradient.sprite = UiSpriteFactory.VerticalGradient(EcoPalette.BackgroundBottom, EcoPalette.BackgroundTop);
+            gradient.type = Image.Type.Simple;
+            gradient.raycastTarget = false;
+
+            // Ust seridin arkasinda yumusak bir sahne isigi.
+            var glow = EcoUi.Rect("TopGlow", root, new Vector2(_safeWidth * 1.25f, _safeWidth * 1.25f));
+            glow.anchoredPosition = new Vector2(0f, _safeHeight * 0.28f);
+            var glowImage = glow.gameObject.AddComponent<Image>();
+            glowImage.sprite = UiSpriteFactory.RadialGlow();
+            // Cok hafif: gradyani yikamadan sadece ust seride odak versin.
+            glowImage.color = new Color(1f, 1f, 1f, 0.30f);
+            glowImage.raycastTarget = false;
+
+            BuildFloatingDecor(root);
+        }
+
+        /// <summary>
+        /// Zemine dagilmis, cok soluk daireler. Duz gradyani kirar ve
+        /// ekrana derinlik katar; hicbir etkilesime karismaz.
+        /// </summary>
+        void BuildFloatingDecor(RectTransform root)
+        {
+            // Sabit tohum: her acilista ayni kompozisyon, yani "rastgele ama tasarlanmis".
+            var random = new System.Random(20260902);
+
+            for (int i = 0; i < 9; i++)
+            {
+                float diameter = _safeWidth * (float)(0.08f + random.NextDouble() * 0.22f);
+                var dot = EcoUi.Disc($"Decor_{i}", root, diameter,
+                    EcoPalette.InkMuted.WithAlpha(0.055f));
+
+                dot.rectTransform.anchoredPosition = new Vector2(
+                    (float)(random.NextDouble() - 0.5) * _safeWidth * 1.05f,
+                    (float)(random.NextDouble() - 0.5) * _safeHeight * 1.05f);
+            }
         }
 
         void BuildRoots()
         {
             var canvasRect = (RectTransform)_canvas.transform;
 
-            var safeGo = new GameObject("SafeArea", typeof(RectTransform));
-            _safeArea = (RectTransform)safeGo.transform;
-            _safeArea.SetParent(canvasRect, false);
-            Stretch(_safeArea);
-            safeGo.AddComponent<SafeAreaFitter>();
-
-            _slotsRoot = CreateRect("Slots", _safeArea);
-            _boardRoot = CreateRect("Board", _safeArea);
+            _safeArea = EcoUi.FullRect("SafeArea", canvasRect);
+            _safeArea.gameObject.AddComponent<SafeAreaFitter>();
 
             // DragLayer guvenli alanin disinda ve en sonda: suruklenen kart her seyin uzerinde.
-            var dragGo = new GameObject("DragLayer", typeof(RectTransform));
-            _dragLayer = (RectTransform)dragGo.transform;
-            _dragLayer.SetParent(canvasRect, false);
-            Stretch(_dragLayer);
+            _dragLayer = EcoUi.FullRect("DragLayer", canvasRect);
             _dragLayer.SetAsLastSibling();
+
+            // Katmanin kendisi dokunuslari yutmasin.
+            var group = _dragLayer.gameObject.AddComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+
             CardView.SetDragLayer(_dragLayer);
         }
 
-        /// <summary>Baslik ve kategori slotlarini kurar; kart alaninin ust sinirini dondurur.</summary>
-        float BuildHeaderAndSlots()
-        {
-            float titleSize = _safeWidth * 0.058f;
-            float statusSize = _safeWidth * 0.032f;
+        // ---------------------------------------------------------------- baslik
 
-            // ---- baslik
+        /// <summary>Baslik blogunu kurar ve bir sonraki ogenin ust sinirini dondurur.</summary>
+        float BuildHeader()
+        {
             float cursorY = _padding;
 
-            var title = CreateLabel("Title", _safeArea, new Vector2(_safeWidth - _padding * 2f, titleSize * 1.4f),
-                Mathf.RoundToInt(titleSize), FontStyle.Bold);
-            title.color = EcoPalette.Ink;
+            float titleSize = _safeWidth * 0.062f;
+            float statusSize = _safeWidth * 0.033f;
+            float counterSize = _safeWidth * 0.036f;
+
+            float titleHeight = titleSize * 1.4f;
+            float statusHeight = statusSize * 1.7f;
+
+            // --- baslik ve sayac ayni satirda
+            var title = EcoUi.Label("Title", _safeArea,
+                new Vector2(_safeWidth - _padding * 2f, titleHeight),
+                Mathf.RoundToInt(titleSize), EcoPalette.Ink, FontStyle.Bold, TextAnchor.MiddleLeft);
             title.text = "Eco-Sort";
             PlaceFromTop(title.rectTransform, cursorY);
-            cursorY += titleSize * 1.4f + _gap * 0.4f;
 
-            _statusLabel = CreateLabel("Status", _safeArea, new Vector2(_safeWidth - _padding * 2f, statusSize * 1.6f),
-                Mathf.RoundToInt(statusSize));
-            _statusLabel.color = EcoPalette.InkMuted;
+            var counterPill = EcoUi.Panel("CounterPill", _safeArea,
+                new Vector2(_safeWidth * 0.26f, titleHeight * 0.78f),
+                Mathf.RoundToInt(titleHeight * 0.39f), EcoPalette.CardFace.WithAlpha(0.85f));
+            PlaceFromTop(counterPill.rectTransform, cursorY + titleHeight * 0.11f,
+                (_safeWidth - _padding * 2f - _safeWidth * 0.26f) * 0.5f);
+
+            _counterLabel = EcoUi.Label("Counter", counterPill.rectTransform,
+                new Vector2(_safeWidth * 0.26f, titleHeight * 0.78f),
+                Mathf.RoundToInt(counterSize), EcoPalette.Ink, FontStyle.Bold);
+            _counterLabel.text = $"0 / {_categories.Count} grup";
+
+            cursorY += titleHeight + _gap * 0.3f;
+
+            // --- durum satiri
+            _statusLabel = EcoUi.Label("Status", _safeArea,
+                new Vector2(_safeWidth - _padding * 2f, statusHeight),
+                Mathf.RoundToInt(statusSize), EcoPalette.InkMuted, FontStyle.Normal, TextAnchor.MiddleLeft);
             PlaceFromTop(_statusLabel.rectTransform, cursorY);
-            cursorY += statusSize * 1.6f + _gap * 1.6f;
 
-            // ---- slotlar
-            // Slot, icine girecek kartla ayni oranda dursun.
-            float slotHeight = _columnWidth * (_iconHasOwnBackdrop ? 1.06f : 1.28f);
-            float slotTitleSize = _columnWidth * 0.105f;
-            float progressSize = _columnWidth * 0.125f;
-
-            float slotTitleH = slotTitleSize * 1.5f;
-            float progressH = progressSize * 1.5f;
-
-            float startX = -(_columnWidth + _gap) * (_categories.Count - 1) * 0.5f;
-            float slotTop = cursorY;
-
-            for (int i = 0; i < _categories.Count; i++)
-            {
-                var category = _categories[i];
-                if (category == null) continue;
-
-                float groupX = startX + (_columnWidth + _gap) * i;
-
-                // Baslik (slotun ustunde)
-                var slotTitle = CreateLabel($"Title_{category.CategoryId}", _slotsRoot,
-                    new Vector2(_columnWidth, slotTitleH), Mathf.RoundToInt(slotTitleSize), FontStyle.Bold);
-                slotTitle.color = EcoPalette.Ink;
-                slotTitle.text = category.DisplayName;
-                PlaceFromTop(slotTitle.rectTransform, slotTop, groupX);
-
-                // Slot govdesi
-                var slotGo = new GameObject($"Slot_{category.CategoryId}", typeof(RectTransform));
-                var slotRect = (RectTransform)slotGo.transform;
-                slotRect.SetParent(_slotsRoot, false);
-                slotRect.sizeDelta = new Vector2(_columnWidth, slotHeight);
-                PlaceFromTop(slotRect, slotTop + slotTitleH, groupX);
-
-                var background = slotGo.AddComponent<Image>();
-                background.sprite = UiSpriteFactory.Rounded(Mathf.RoundToInt(_columnWidth * 0.11f));
-                background.type = Image.Type.Sliced;
-
-                // Bos slot isareti: ilk kart gelince kartlarin altinda kalir.
-                var hint = new GameObject("Hint", typeof(RectTransform));
-                var hintRect = (RectTransform)hint.transform;
-                hintRect.SetParent(slotRect, false);
-                hintRect.sizeDelta = Vector2.one * (_columnWidth * 0.38f);
-                var hintImage = hint.AddComponent<Image>();
-                hintImage.sprite = UiSpriteFactory.Circle();
-                hintImage.color = category.AccentColor.WithAlpha(0.18f);
-                hintImage.raycastTarget = false;
-
-                // Tamamlanma parlamasi
-                var glow = new GameObject("Glow", typeof(RectTransform));
-                var glowRect = (RectTransform)glow.transform;
-                glowRect.SetParent(slotRect, false);
-                glowRect.sizeDelta = new Vector2(_columnWidth, slotHeight);
-                var glowImage = glow.AddComponent<Image>();
-                glowImage.sprite = background.sprite;
-                glowImage.type = Image.Type.Sliced;
-                glowImage.raycastTarget = false;
-                glow.AddComponent<CanvasGroup>().alpha = 0f;
-                glow.SetActive(false);
-
-                var slot = slotGo.AddComponent<CategorySlotView>();
-                slot.ConfigureVisuals(background, glowImage);
-                slot.ConfigureLayout(new Vector2(_columnWidth * 0.05f, -_columnWidth * 0.045f), 3f);
-                slot.Bind(category);
-
-                // Ilerleme (slotun altinda)
-                var progress = CreateLabel($"Progress_{category.CategoryId}", _slotsRoot,
-                    new Vector2(_columnWidth, progressH), Mathf.RoundToInt(progressSize), FontStyle.Bold);
-                progress.color = category.AccentColor;
-                PlaceFromTop(progress.rectTransform, slotTop + slotTitleH + slotHeight, groupX);
-                _progressLabels[category] = progress;
-
-                SetProgressLabel(category, 0);
-            }
-
-            return slotTop + slotTitleH + slotHeight + progressH + _gap * 1.6f;
+            cursorY += statusHeight + _gap * 1.4f;
+            return cursorY;
         }
 
-        void BuildCards(float boardTop)
+        // ---------------------------------------------------------------- slot seridi
+
+        float BuildSlotRow(float cursorY)
+        {
+            _slotManager = gameObject.GetComponent<SlotManager>();
+            if (_slotManager == null) _slotManager = gameObject.AddComponent<SlotManager>();
+
+            _slotManager.SetCategories(_categories);
+
+            float rowWidth = _safeWidth - _padding * 2f;
+            float rowHeight = _slotManager.Build(_safeArea, rowWidth, _gap);
+
+            PlaceFromTop(_slotManager.SlotRow, cursorY);
+
+            return cursorY + rowHeight + _gap * 1.6f;
+        }
+
+        // ---------------------------------------------------------------- kart tepsisi
+
+        void BuildTray(float cursorY)
+        {
+            var pool = BuildCardPool();
+            if (pool.Count == 0)
+            {
+                Debug.LogWarning("[EcoSort] Kategorilerde hic kart yok; tepsi bos kalacak.", this);
+                return;
+            }
+
+            float trayWidth = _safeWidth - _padding * 2f;
+            float trayPadding = _gap;
+            // Ust serit beklenenden buyuk gelirse tepsi negatif yukseklige dusmesin.
+            float available = Mathf.Max(_safeHeight * 0.25f, _safeHeight - _padding - cursorY);
+
+            var trayRect = EcoUi.Rect("CardTray", _safeArea, new Vector2(trayWidth, available));
+            _tray = trayRect.gameObject.AddComponent<CardTray>();
+
+            // Kart orani tek yerde tanimli olsun diye tepsiye soruyoruz: adi gosterilen
+            // kartlar biraz uzun, sadece ikonlu kartlar kare durur.
+            _tray.Configure(_cardColumns, CardAspect);
+
+            // Gereken yukseklik kalan bosluktan buyukse tepsi tamamini kullanir ve
+            // kartlari kendisi kucultur.
+            float wanted = _tray.MeasureHeight(trayWidth, pool.Count, _gap, trayPadding);
+            float trayHeight = Mathf.Min(wanted, available);
+            trayRect.sizeDelta = new Vector2(trayWidth, trayHeight);
+
+            // Tepsiyi kalan bosluga ortala: ust serit ile ekran alti arasinda nefes olsun.
+            PlaceFromTop(trayRect, cursorY + Mathf.Max(0f, (available - trayHeight) * 0.5f));
+
+            var cellSize = _tray.Build(new Vector2(trayWidth, trayHeight), pool.Count, _gap, trayPadding);
+
+            for (int i = 0; i < pool.Count; i++)
+            {
+                var card = CreateCard(pool[i], cellSize, trayRect);
+                _tray.AddCard(card, i);
+                _manager.RegisterCard(card);
+            }
+
+            _tray.PlayDealIn();
+        }
+
+        /// <summary>Kart yuksekliginin genisligine orani.</summary>
+        float CardAspect => _showCardNames ? 1.28f : (_iconHasOwnBackdrop ? 1f : 1.34f);
+
+        List<CardData> BuildCardPool()
         {
             var pool = new List<CardData>();
+
             foreach (var category in _categories)
             {
                 if (category == null) continue;
@@ -285,164 +335,157 @@ namespace EcoSort.Core
                     if (card != null) pool.Add(card);
             }
 
-            if (pool.Count == 0) return;
             if (_shuffle) Shuffle(pool);
-
-            int rows = Mathf.CeilToInt(pool.Count / (float)_columns);
-            float boardHeight = _safeHeight - _padding - boardTop;
-
-            // Kendi cercevesini tasiyan ikonlar kare cizilmistir: kart da kare olsun ki
-            // ikonun altinda ustunde bos beyaz kalmasin.
-            float aspect = _iconHasOwnBackdrop ? 1f : 1.34f;
-            float cardWidth = _columnWidth * 0.92f;
-            float cardHeight = cardWidth * aspect;
-            float maxCardHeight = (boardHeight - _gap * (rows - 1)) / rows;
-
-            if (cardHeight > maxCardHeight)
-            {
-                cardHeight = maxCardHeight;
-                cardWidth = cardHeight / aspect;
-            }
-
-            float gridHeight = cardHeight * rows + _gap * (rows - 1);
-            float gridTop = boardTop + Mathf.Max(0f, (boardHeight - gridHeight) * 0.5f);
-            float startX = -(cardWidth + _gap) * (_columns - 1) * 0.5f;
-
-            for (int i = 0; i < pool.Count; i++)
-            {
-                int row = i / _columns;
-                int col = i % _columns;
-
-                // Son satir eksikse ortala.
-                int itemsInRow = Mathf.Min(_columns, pool.Count - row * _columns);
-                float rowStartX = itemsInRow == _columns
-                    ? startX
-                    : -(cardWidth + _gap) * (itemsInRow - 1) * 0.5f;
-
-                float x = rowStartX + (cardWidth + _gap) * col;
-                float y = gridTop + (cardHeight + _gap) * row;
-
-                CreateCard(pool[i], new Vector2(cardWidth, cardHeight), x, y);
-            }
+            return pool;
         }
 
-        void CreateCard(CardData data, Vector2 size, float x, float yFromTop)
+        /// <summary>
+        /// Tek bir kart nesnesi uretir. Kart once tepsinin altinda dogar,
+        /// sonra CardTray.AddCard ile kendi yuvasina oturur.
+        /// </summary>
+        CardView CreateCard(CardData data, Vector2 size, RectTransform temporaryParent)
         {
-            var accent = data.Category != null ? data.Category.AccentColor : EcoPalette.InkMuted;
-            int cornerRadius = Mathf.RoundToInt(size.x * 0.13f);
+            int cornerRadius = Mathf.RoundToInt(size.x * 0.15f);
+            var accent = data.AccentColor;
 
             // Kok: yumusak golge. Govde biraz yukari kaydirilinca golge altta gorunur.
-            var go = new GameObject($"Card_{data.CardId}", typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(_boardRoot, false);
-            rect.sizeDelta = size;
-            PlaceFromTop(rect, yFromTop, x);
+            var rect = EcoUi.Rect($"Card_{data.CardId}", temporaryParent, size);
 
-            var shadow = go.AddComponent<Image>();
-            shadow.sprite = UiSpriteFactory.Shadow(cornerRadius, Mathf.RoundToInt(size.x * 0.08f));
+            var shadow = rect.gameObject.AddComponent<Image>();
+            shadow.sprite = UiSpriteFactory.Shadow(cornerRadius, Mathf.RoundToInt(size.x * 0.09f));
             shadow.type = Image.Type.Sliced;
             shadow.color = EcoPalette.Shadow;
             shadow.raycastTarget = false;
 
-            go.AddComponent<CanvasGroup>();
+            rect.gameObject.AddComponent<CanvasGroup>();
 
-            // Govde
-            var body = new GameObject("Body", typeof(RectTransform));
-            var bodyRect = (RectTransform)body.transform;
-            bodyRect.SetParent(rect, false);
-            bodyRect.sizeDelta = size;
-            bodyRect.anchoredPosition = new Vector2(0f, size.y * 0.02f);
-            var bodyImage = body.AddComponent<Image>();
-            bodyImage.sprite = UiSpriteFactory.Rounded(cornerRadius);
-            bodyImage.type = Image.Type.Sliced;
-            bodyImage.raycastTarget = true;   // dokunmayi bu yakalar, olaylar koke cikar
+            // Govde: dokunmayi bu yakalar, olaylar koke cikar.
+            var body = EcoUi.Panel("Body", rect, size, cornerRadius, EcoPalette.CardFace, true);
+            body.rectTransform.anchoredPosition = new Vector2(0f, size.y * 0.02f);
 
             // Ad gosterilmiyorsa ikon kartin tam ortasinda dursun.
-            float contentY = _showCardNames ? size.y * 0.14f : 0f;
+            float contentY = _showCardNames ? size.y * 0.12f : 0f;
 
-            // Kategori renginde disk: siluet ikonun arkasindaki renk kodu.
-            // Ikon kendi zeminini tasiyorsa gereksiz, cizilmez.
+            // Kategori renginde yumusak altlik: seffaf zeminli ikonun arkasindaki
+            // renk kodu. Ikon kendi zeminini tasiyorsa gereksiz, cizilmez.
+            //
+            // Daire yerine yuvarlak kare: ikonlar (klavye, atki) yatay uzandigi icin
+            // dairenin disina tasiyordu; kare altlik kartin formuyla da uyumlu.
             if (!_iconHasOwnBackdrop)
             {
-                var disc = new GameObject("Disc", typeof(RectTransform));
-                var discRect = (RectTransform)disc.transform;
-                discRect.SetParent(bodyRect, false);
-                discRect.sizeDelta = Vector2.one * (size.x * (_showCardNames ? 0.52f : 0.64f));
-                discRect.anchoredPosition = new Vector2(0f, contentY);
-                var discImage = disc.AddComponent<Image>();
-                discImage.sprite = UiSpriteFactory.Circle();
-                discImage.color = accent;
-                discImage.raycastTarget = false;
+                float padSize = size.x * (_showCardNames ? 0.84f : 0.90f);
+                var pad = EcoUi.Panel("IconPad", body.rectTransform, Vector2.one * padSize,
+                    Mathf.RoundToInt(padSize * 0.22f), accent.WithAlpha(0.28f));
+                pad.rectTransform.anchoredPosition = new Vector2(0f, contentY);
             }
 
-            // Ikon. Sprite'i CardData.Artwork saglar.
             float iconScale = _iconHasOwnBackdrop
-                ? (_showCardNames ? 0.78f : 0.94f)
-                : (_showCardNames ? 0.34f : 0.42f);
+                ? (_showCardNames ? 0.74f : 0.95f)
+                : (_showCardNames ? 0.72f : 0.80f);
 
-            var art = new GameObject("Icon", typeof(RectTransform));
-            var artRect = (RectTransform)art.transform;
-            artRect.SetParent(bodyRect, false);
-            artRect.sizeDelta = Vector2.one * (size.x * iconScale);
-            artRect.anchoredPosition = new Vector2(0f, contentY);
-            var artImage = art.AddComponent<Image>();
-            artImage.preserveAspect = true;
-            artImage.raycastTarget = false;
+            var icon = EcoUi.Icon("Icon", body.rectTransform, Vector2.one * (size.x * iconScale),
+                null, Color.white);
+            icon.rectTransform.anchoredPosition = new Vector2(0f, contentY);
 
             if (_showCardNames)
             {
-                var label = CreateLabel("Name", bodyRect, new Vector2(size.x * 0.86f, size.y * 0.26f),
-                    Mathf.RoundToInt(size.x * 0.115f), FontStyle.Bold);
-                label.color = EcoPalette.Ink;
+                var label = EcoUi.Label("Name", body.rectTransform,
+                    new Vector2(size.x * 0.90f, size.y * 0.22f),
+                    Mathf.RoundToInt(size.x * 0.125f), EcoPalette.Ink, FontStyle.Bold);
                 label.text = data.DisplayName;
-                label.rectTransform.anchoredPosition = new Vector2(0f, -size.y * 0.30f);
+                label.rectTransform.anchoredPosition = new Vector2(0f, -size.y * 0.335f);
             }
 
-            var card = go.AddComponent<CardView>();
-            card.ConfigureVisuals(bodyImage, artImage);
-            card.Bind(data);
-            card.CaptureHome();   // konum atandiktan SONRA: evi burasi
+            var card = rect.gameObject.AddComponent<CardView>();
+            card.ConfigureVisuals(body, icon);
+            card.Bind(data);   // sprite burada cozulur (Artwork ya da proseduel kart yuzu)
 
-            _manager.RegisterCard(card);
+            return card;
+        }
+
+        // ---------------------------------------------------------------- kutlama banneri
+
+        void BuildBanner()
+        {
+            var rect = EcoUi.Rect("Banner", _dragLayer,
+                new Vector2(_safeWidth * 0.86f, _safeWidth * 0.30f));
+
+            var panel = rect.gameObject.AddComponent<Image>();
+            panel.sprite = UiSpriteFactory.Rounded(Mathf.RoundToInt(_safeWidth * 0.07f));
+            panel.type = Image.Type.Sliced;
+            panel.color = EcoPalette.CardFace.WithAlpha(0.96f);
+            panel.raycastTarget = false;
+
+            _bannerLabel = EcoUi.Label("BannerText", rect,
+                new Vector2(_safeWidth * 0.78f, _safeWidth * 0.26f),
+                Mathf.RoundToInt(_safeWidth * 0.055f), EcoPalette.Ink, FontStyle.Bold);
+
+            _bannerGroup = rect.gameObject.AddComponent<CanvasGroup>();
+            _bannerGroup.alpha = 0f;
+            _bannerGroup.blocksRaycasts = false;
+        }
+
+        void ShowBanner(string message)
+        {
+            if (_bannerGroup == null) return;
+
+            _bannerLabel.text = message;
+
+            var rect = (RectTransform)_bannerGroup.transform;
+            rect.localScale = Vector3.one * 0.8f;
+
+            EcoTween.Fade(_bannerGroup, 1f, 0.2f);
+            EcoTween.Scale(rect, Vector3.one, 0.4f, EcoEase.OutBack);
+
+            EcoConfetti.Burst(rect, _dragLayer, EcoPalette.Success, 40, _safeWidth * 0.5f);
         }
 
         // ---------------------------------------------------------------- olaylar
 
         void Subscribe()
         {
-            _manager.CategoryProgressChanged += HandleProgress;
-            _manager.CategoryCompleted += HandleCompleted;
             _manager.MatchRejected += HandleRejected;
-            _manager.BoardCleared += HandleBoardCleared;
+            _manager.ComboChanged += HandleCombo;
+
+            // Kategori olaylari SlotManager uzerinden dinlenir: istenen mimarideki
+            // OnCategoryCompleted akisi burasi.
+            _slotManager.OnCategoryProgress += HandleProgress;
+            _slotManager.OnCategoryCompleted += HandleCompleted;
+            _slotManager.OnAllCategoriesCompleted += HandleAllCompleted;
         }
 
         void HandleProgress(CategorySlotView slot, int current, int required)
         {
-            SetProgressLabel(slot.Category, current);
-            SetStatus(_manager.Combo > 1
-                ? $"Harika!  kombo x{_manager.Combo}"
-                : slot.Category.DisplayName);
+            if (slot == null || slot.Category == null) return;
+            SetStatus($"{slot.Category.DisplayName}  {current}/{required}");
         }
 
-        void HandleCompleted(CategoryData category)
+        void HandleCombo(int combo)
         {
-            SetStatus($"{category.CompleteMessage} tamamlandi!");
+            if (combo > 1) SetStatus($"Harika!   kombo x{combo}");
+        }
+
+        void HandleCompleted(CategoryData category, CategorySlotView slot)
+        {
+            SetStatus($"{category.CompleteMessage} tamamlandı!");
+            _counterLabel.text = $"{_slotManager.CompletedCount} / {_slotManager.TotalCount} grup";
+        }
+
+        void HandleAllCompleted()
+        {
+            SetStatus("Bütün gruplar tamam!");
+            ShowBanner("Pano temiz!\nBeş grubun da yerini buldu.");
         }
 
         void HandleRejected(CardView card)
         {
-            SetStatus("Bu kart oraya ait degil");
-        }
+            if (card != null && card.Data != null && !string.IsNullOrEmpty(card.Data.Hint))
+            {
+                SetStatus(card.Data.Hint);
+                return;
+            }
 
-        void HandleBoardCleared()
-        {
-            SetStatus("Pano temizlendi!");
-        }
-
-        void SetProgressLabel(CategoryData category, int current)
-        {
-            if (category == null || !_progressLabels.TryGetValue(category, out var label)) return;
-            label.text = $"{current}/{category.RequiredCardCount}";
+            SetStatus("Bu kart oraya ait değil");
         }
 
         void SetStatus(string message)
@@ -459,59 +502,13 @@ namespace EcoSort.Core
             rect.anchoredPosition = new Vector2(x, _safeHeight * 0.5f - yFromTop - height * 0.5f);
         }
 
-        static void Stretch(RectTransform rect)
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-        }
-
-        RectTransform CreateRect(string name, RectTransform parent)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = Vector2.zero;
-            return rect;
-        }
-
-        Text CreateLabel(string name, RectTransform parent, Vector2 size, int fontSize,
-            FontStyle style = FontStyle.Normal)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = size;
-
-            var text = go.AddComponent<Text>();
-            text.font = UiFont;
-            text.fontSize = Mathf.Max(8, fontSize);
-            text.fontStyle = style;
-            text.alignment = TextAnchor.MiddleCenter;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-            text.color = EcoPalette.Ink;
-            return text;
-        }
-
         void Shuffle(List<CardData> list)
         {
             var random = _randomSeed != 0 ? new System.Random(_randomSeed) : new System.Random();
             for (int i = list.Count - 1; i > 0; i--)
             {
                 int j = random.Next(i + 1);
-                var temp = list[i];
-                list[i] = list[j];
-                list[j] = temp;
+                (list[i], list[j]) = (list[j], list[i]);
             }
         }
     }

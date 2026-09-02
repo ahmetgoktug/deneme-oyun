@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Card_deniz_Marti
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CardData
   _cardId: deniz_marti
-  _displayName: Marti
+  _displayName: Martı
   _artwork: {fileID: 21300000, guid: 4b990f123dc539f4da4437b29f75beb8, type: 3}
+  _iconShape: 8
   _tint: {r: 1, g: 1, b: 1, a: 1}
   _category: {fileID: 11400000, guid: c86e0ce1039551a42a5f85ae7c46f6cb, type: 2}
+  _categoryKind: 1
   _hint: 

@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Card_sonbahar_YunAtki
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CardData
   _cardId: sonbahar_yunatki
-  _displayName: Yun Atki
+  _displayName: "Y\xFCn Atk\u0131"
   _artwork: {fileID: 21300000, guid: fa06e33e25f36e04ebb592057f977bdd, type: 3}
+  _iconShape: 5
   _tint: {r: 1, g: 1, b: 1, a: 1}
   _category: {fileID: 11400000, guid: 8639154402fe5a14590c892f27579530, type: 2}
+  _categoryKind: 3
   _hint: 

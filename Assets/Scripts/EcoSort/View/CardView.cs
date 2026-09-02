@@ -21,17 +21,17 @@ namespace EcoSort.View
     }
 
     /// <summary>
-    /// Canvas UI tabanli kart. Surukleme, birakma, kapali/acik yuz ve tum
-    /// dokunsal geri bildirimlerden (juice) sorumludur.
+    /// Canvas UI tabanli kart (istenen mimarideki "CardController"). Surukleme, birakma,
+    /// kapali/acik yuz ve tum dokunsal geri bildirimlerden (juice) sorumludur.
     ///
     /// Kart oyun kurallarini BILMEZ: neyin eslestigine CategoryManager karar verir.
     /// Kart yalnizca "birakildim" der ve sonuca gore ya oturur ya evine doner.
     ///
     /// Sahne kurulumu:
-    ///   Card (RectTransform + CanvasGroup + Image[raycast target] + CardView)
-    ///     +- Face      : Image  (kart on yuzu / cerceve)
-    ///     +- Artwork   : Image  (kart gorseli)
-    ///     +- Label     : TMP_Text
+    ///   Card (RectTransform + CanvasGroup + Image[golge] + CardView)
+    ///     +- Body      : Image  (kart govdesi / cerceve, raycast target)
+    ///     +- Icon      : Image  (kart gorseli)
+    ///     +- Label     : TMP_Text (opsiyonel)
     ///     +- Back      : Image  (kapali yuz - en ustte)
     /// </summary>
     [RequireComponent(typeof(RectTransform))]
@@ -57,7 +57,7 @@ namespace EcoSort.View
         [Tooltip("Yanlis yere birakilinca eve donus suresi.")]
         [SerializeField] float _returnDuration = 0.3f;
         [Tooltip("Dogru yere oturma suresi.")]
-        [SerializeField] float _placeDuration = 0.22f;
+        [SerializeField] float _placeDuration = 0.24f;
         [SerializeField] float _flipDuration = 0.26f;
         [Tooltip("Kart govdesinin kategori rengiyle tonlanma miktari. Mobilde okunurluk icin dusuk tut.")]
         [SerializeField, Range(0f, 1f)] float _frameTintStrength = 0.10f;
@@ -93,16 +93,20 @@ namespace EcoSort.View
         Vector2 _homeAnchoredPos;
         int _homeSiblingIndex;
 
+        // Kartin nominal olcegi. Bir slota girince kucultuldugu icin "1" varsayilamaz.
         Vector3 _baseScale = Vector3.one;
         Vector3 _grabWorldOffset;
 
         bool _isDragging;
         bool _consumedByTarget;
         bool _pendingRejectShake;
+        bool _pendingAcceptPop;
+        bool _isPlacing;
 
         TweenHandle _moveTween;
         TweenHandle _scaleTween;
         Coroutine _shakeRoutine;
+        Coroutine _clearRoutine;
 
         // ---------------------------------------------------------------- ozellikler
 
@@ -134,10 +138,16 @@ namespace EcoSort.View
 
         void OnDisable()
         {
-            // Sahne kapanirken yarim kalan tween'ler yok edilmis nesneye dokunmasin.
+            // Sahne kapanirken yarim kalan tween/coroutine'ler yok edilmis nesneye dokunmasin.
             _moveTween?.Kill();
             _scaleTween?.Kill();
+
             if (_shakeRoutine != null) { StopCoroutine(_shakeRoutine); _shakeRoutine = null; }
+            if (_clearRoutine != null) { StopCoroutine(_clearRoutine); _clearRoutine = null; }
+
+            _isPlacing = false;
+            _pendingAcceptPop = false;
+            _pendingRejectShake = false;
         }
 
         // ---------------------------------------------------------------- kurulum
@@ -170,9 +180,14 @@ namespace EcoSort.View
 
             if (_artworkImage != null)
             {
-                _artworkImage.sprite = _data.Artwork;
+                // Elle cizilmis gorsel yoksa kategori renginde proseduel bir kart yuzu uret.
+                var sprite = _data.Artwork != null
+                    ? _data.Artwork
+                    : IconFactory.GetCardTile(_data.IconShape, _data.AccentColor);
+
+                _artworkImage.sprite = sprite;
                 _artworkImage.color = _data.Tint;
-                _artworkImage.enabled = _data.Artwork != null;
+                _artworkImage.enabled = sprite != null;
             }
 
             if (_nameLabel != null) _nameLabel.text = _data.DisplayName;
@@ -191,6 +206,15 @@ namespace EcoSort.View
             _homeParent = _rect.parent;
             _homeAnchoredPos = _rect.anchoredPosition;
             _homeSiblingIndex = _rect.GetSiblingIndex();
+        }
+
+        /// <summary>
+        /// Kartin nominal olcegini belirler. Kart bir slota kuculerek girdiginde
+        /// tum animasyonlar (pop, surukleme, geri donus) bu degeri referans alir.
+        /// </summary>
+        public void SetBaseScale(float scale)
+        {
+            _baseScale = Vector3.one * Mathf.Max(0.01f, scale);
         }
 
         /// <summary>
@@ -265,6 +289,7 @@ namespace EcoSort.View
 
             _moveTween?.Kill();
             _scaleTween?.Kill();
+            _isPlacing = false;
 
             // Ust katmana tasi ve en one al.
             _rect.SetParent(dragLayer, true);
@@ -374,8 +399,11 @@ namespace EcoSort.View
 
         /// <summary>
         /// Karti yeni bir ebeveyne oturtur (kategori slotu gibi) ve orayi yeni evi yapar.
+        /// scaleMultiplier ile kart hedefe kuculerek girebilir: 5 slotlu dar duzende
+        /// kabul edilen kartlar slotun icine sigsin diye kullanilir.
         /// </summary>
-        public void PlaceInto(Transform parent, Vector2 anchoredPosition, Action onComplete = null)
+        public void PlaceInto(Transform parent, Vector2 anchoredPosition, float scaleMultiplier = 1f,
+            Action onComplete = null)
         {
             _moveTween?.Kill();
             _scaleTween?.Kill();
@@ -383,20 +411,95 @@ namespace EcoSort.View
             _rect.SetParent(parent, true);
             _rect.SetAsLastSibling();
 
+            SetBaseScale(scaleMultiplier);
+            _isPlacing = true;
+
             _scaleTween = EcoTween.Scale(_rect, _baseScale, _placeDuration, EcoEase.OutQuad);
             _moveTween = EcoTween.MoveAnchored(_rect, anchoredPosition, _placeDuration, EcoEase.OutBack, () =>
             {
+                _isPlacing = false;
                 CaptureHome();
+
+                // Yerlesme tamamlandiktan SONRA pop oynat: iki animasyon ayni
+                // localScale'i yazip karti buyumus halde birakmasin.
+                if (_pendingAcceptPop)
+                {
+                    _pendingAcceptPop = false;
+                    PlayPop();
+                }
+
                 onComplete?.Invoke();
             });
         }
 
+        /// <summary>
+        /// Karti animasyonsuz olarak bir ebeveyne oturtur. Tahta kurulurken kullanilir.
+        /// </summary>
+        public void SnapInto(Transform parent, Vector2 anchoredPosition)
+        {
+            _moveTween?.Kill();
+            _scaleTween?.Kill();
+
+            _rect.SetParent(parent, false);
+            _rect.anchoredPosition = anchoredPosition;
+            _rect.localScale = _baseScale;
+            CaptureHome();
+        }
+
+        // ---------------------------------------------------------------- giris animasyonu
+
+        /// <summary>
+        /// Tahta kurulurken kartin asagidan sekerek yerine oturmasi.
+        /// Kartlar sirayla geldigi icin ekran tek karede "yapistirilmis" gibi durmaz.
+        /// </summary>
+        public void PlayDealIn(float delay, float fromOffsetY = -220f)
+        {
+            if (!gameObject.activeInHierarchy) return;
+            StartCoroutine(DealInRoutine(delay, fromOffsetY));
+        }
+
+        IEnumerator DealInRoutine(float delay, float fromOffsetY)
+        {
+            Vector2 target = _rect.anchoredPosition;
+
+            _canvasGroup.alpha = 0f;
+            _rect.anchoredPosition = target + new Vector2(0f, fromOffsetY);
+            _rect.localScale = _baseScale * 0.82f;
+
+            if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
+            if (this == null || _rect == null) yield break;
+
+            // Tween'leri alanlara ata: oyuncu dagitim bitmeden karti kaparsa
+            // OnBeginDrag bunlari oldurup kaldirma animasyonunu temiz baslatabilsin.
+            EcoTween.Fade(_canvasGroup, 1f, 0.18f);
+            _scaleTween = EcoTween.Scale(_rect, _baseScale, 0.34f, EcoEase.OutBack);
+            _moveTween = EcoTween.MoveAnchored(_rect, target, 0.34f, EcoEase.OutBack, CaptureHome);
+        }
+
         // ---------------------------------------------------------------- geri bildirim
 
-        /// <summary>Dogru eslesme: kisa bir pop.</summary>
+        /// <summary>
+        /// Dogru eslesme: kisa bir pop. Kart hala hedefe dogru uçuyorsa pop,
+        /// yerlesme bitene kadar ertelenir (iki tween ayni olcegi yazmasin).
+        /// </summary>
         public void PlayAccepted()
         {
-            EcoTween.Punch(_rect, 0.14f, 0.3f);
+            if (_isPlacing)
+            {
+                _pendingAcceptPop = true;
+                return;
+            }
+
+            PlayPop();
+        }
+
+        void PlayPop()
+        {
+            if (!gameObject.activeInHierarchy) return;
+
+            _scaleTween?.Kill();
+            _rect.localScale = _baseScale;
+            _scaleTween = EcoTween.Punch(_rect, 0.14f, 0.3f);
         }
 
         /// <summary>
@@ -413,6 +516,9 @@ namespace EcoSort.View
                 _pendingRejectShake = true;
                 return;
             }
+
+            // Devam eden bir konum tween'i sallanmayla yarismasin.
+            _moveTween?.Kill();
 
             if (_shakeRoutine != null) StopCoroutine(_shakeRoutine);
             _shakeRoutine = StartCoroutine(ShakeRoutine(10f, 0.25f));
@@ -437,13 +543,29 @@ namespace EcoSort.View
             _shakeRoutine = null;
         }
 
+        /// <summary>Ipucu: oyuncu bir sure hareketsiz kalinca kart hafifce nefes alir.</summary>
+        public void PlayHintPulse()
+        {
+            if (!gameObject.activeInHierarchy || _isDragging || _isPlacing) return;
+
+            _scaleTween?.Kill();
+            _rect.localScale = _baseScale;
+            _scaleTween = EcoTween.Punch(_rect, 0.10f, 0.55f);
+        }
+
         /// <summary>
         /// Grup tamamlandiginda kartin panodan silinme animasyonu:
         /// hafifce buyur, sonra kucuLup soner. Bitince onComplete cagrilir.
         /// </summary>
         public void PlayClearAndDespawn(float delay, Action onComplete = null)
         {
-            StartCoroutine(ClearRoutine(delay, onComplete));
+            if (!gameObject.activeInHierarchy)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            _clearRoutine = StartCoroutine(ClearRoutine(delay, onComplete));
         }
 
         IEnumerator ClearRoutine(float delay, Action onComplete)
@@ -453,6 +575,11 @@ namespace EcoSort.View
             _interactable = false;
             _canvasGroup.blocksRaycasts = false;
 
+            // Yarim kalan yerlesme tween'i olcegi geri yazmasin.
+            _moveTween?.Kill();
+            _scaleTween?.Kill();
+            _isPlacing = false;
+
             EcoTween.Scale(_rect, _baseScale * 1.18f, 0.12f, EcoEase.OutQuad);
             yield return new WaitForSecondsRealtime(0.12f);
 
@@ -460,6 +587,7 @@ namespace EcoSort.View
             EcoTween.Fade(_canvasGroup, 0f, 0.22f);
             yield return new WaitForSecondsRealtime(0.24f);
 
+            _clearRoutine = null;
             onComplete?.Invoke();
         }
     }

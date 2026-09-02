@@ -15,10 +15,14 @@ namespace EcoSort.Data
         [Tooltip("Bos birakilirsa asset adi kullanilir. Kayit/analitik icin sabit tutun.")]
         [SerializeField] string _categoryId;
         [SerializeField] string _displayName = "Yeni Kategori";
+        [Tooltip("Kartlarin enum uzerinden eslesebilmesi icin grup turu.")]
+        [SerializeField] CategoryKind _kind = CategoryKind.None;
 
         [Header("Gorsel Kimlik")]
         [SerializeField] Sprite _icon;
         [SerializeField] Color _accentColor = new Color(0.42f, 0.72f, 0.55f);
+        [Tooltip("Slot rozeti bos oldugunda cizilecek proseduel amblem.")]
+        [SerializeField] Utils.EcoIcon _emblem = Utils.EcoIcon.Leaf;
 
         [Header("Tamamlanma Kurali")]
         [Tooltip("Grubun temizlenmesi icin gereken kart sayisi (3/3, 4/4 gibi).")]
@@ -39,8 +43,10 @@ namespace EcoSort.Data
 
         public string CategoryId => string.IsNullOrEmpty(_categoryId) ? name : _categoryId;
         public string DisplayName => string.IsNullOrEmpty(_displayName) ? name : _displayName;
+        public CategoryKind Kind => _kind;
         public Sprite Icon => _icon;
         public Color AccentColor => _accentColor;
+        public Utils.EcoIcon Emblem => _emblem;
         public int RequiredCardCount => Mathf.Max(1, _requiredCardCount);
         public IReadOnlyList<CardData> Cards => _cards;
 

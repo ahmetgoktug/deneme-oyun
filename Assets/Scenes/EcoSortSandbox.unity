@@ -331,15 +331,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Core.SandboxBoard
   _categories:
+  - {fileID: 11400000, guid: c86e0ce1039551a42a5f85ae7c46f6cb, type: 2}
   - {fileID: 11400000, guid: acae216b01c84654c92d4f6a8c288ffd, type: 2}
   - {fileID: 11400000, guid: 8639154402fe5a14590c892f27579530, type: 2}
-  - {fileID: 11400000, guid: c86e0ce1039551a42a5f85ae7c46f6cb, type: 2}
+  - {fileID: 11400000, guid: 458de040967241acaa23d2f1b7eec565, type: 2}
+  - {fileID: 11400000, guid: dac0453e2bf1424e9c52d00b72f88faf, type: 2}
   _canvas: {fileID: 1222190053}
-  _paddingRatio: 0.045
-  _gapRatio: 0.022
-  _columns: 3
-  _showCardNames: 0
-  _iconHasOwnBackdrop: 1
+  _paddingRatio: 0.04
+  _gapRatio: 0.02
+  _cardColumns: 4
+  _showCardNames: 1
+  _iconHasOwnBackdrop: 0
   _shuffle: 1
   _randomSeed: 0
 --- !u!114 &1307349728

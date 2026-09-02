@@ -104,3 +104,65 @@ git checkout -b ozellik-adi
 
 **Sahne çakışması oldu** → Panikleyip rastgele çözme. Karşı tarafla konuş,
 kimin versiyonunun temel alınacağına karar verin, sonra diğerinin değişikliğini elle tekrar uygulayın.
+
+---
+
+## Eco-Sort oyun mimarisi
+
+Oyun `Assets/Scripts/EcoSort/` altında, dört katmana ayrılmış durumda. Katmanlar
+tek yönlü konuşur: **View kural bilmez, Core görsel bilmez.**
+
+| Katman | Dosyalar | Sorumluluk |
+|---|---|---|
+| `Data/` | `CardData`, `CategoryData`, `CategoryKind` | ScriptableObject içerik. Kod değişmeden kart/kategori eklenir. |
+| `Core/` | `CategoryManager`, `SlotManager`, `SandboxBoard` | Kural motoru, slot şeridi, ekran kurulumu. |
+| `View/` | `CardView`, `CategorySlotView`, `CardTray`, `SafeAreaFitter` | Sürükle-bırak, animasyon, dokunsal geri bildirim. |
+| `Utils/` | `EcoUi`, `EcoTween`, `EcoPalette`, `IconFactory`, `UiSpriteFactory`, `EcoConfetti`, `EcoAudio` | Asset gerektirmeyen görsel/ses altyapısı. |
+
+### Ekran düzeni
+
+Pano `SandboxBoard` tarafından çalışma zamanında kurulur (prefab yok):
+
+```
+Canvas (Screen Space - Overlay, CanvasScaler 1080x1920, Match = Width)
+ ├─ Background   gradyan + radyal ışık + soluk dekor daireler
+ ├─ SafeArea     SafeAreaFitter (çentik/gesture çubuğu)
+ │   ├─ Title / Status / CounterPill
+ │   ├─ SlotRow      HorizontalLayoutGroup → 5 kategori slotu
+ │   └─ CardTray     VerticalLayoutGroup → satırlar → HorizontalLayoutGroup → 15 kart yuvası
+ └─ DragLayer    sürüklenen kart, konfeti ve bitiş banner'ı
+```
+
+**Neden kartlar Layout Group'un doğrudan çocuğu değil:** Layout Group her karede
+`anchoredPosition`'ı geri yazar ve sürükleme/geri dönüş animasyonlarını bozar.
+Bu yüzden layout boş *yuvaları* hizalar, kart ise yuvanın çocuğudur.
+
+### Eşleşme akışı
+
+```
+CardView.OnDrop / OnPointerClick
+        ↓
+CategoryManager.TryPlaceCard / TryAutoPlace / TryMatchCards   ← tek karar noktası
+        ↓ kabul
+CategorySlotView.AttachCard  →  3/3 olunca  PlayCompleteAndClear
+        ↓
+SlotManager.OnCategoryCompleted  →  OnAllCategoriesCompleted
+```
+
+### Yeni kategori eklemek
+
+1. `Assets/EcoSort/Data/` içinde sağ tık → *Create > Eco-Sort > Category Data*.
+2. Aynı menüden 3 adet *Card Data* üret, `_category` alanını yeni kategoriye bağla.
+3. Kategorinin `_cards` listesine kartları ekle.
+4. Sahnedeki `EcoSortGameManager` → `SandboxBoard` → *Icerik* listesine kategoriyi ekle.
+
+Ölçüler ekran genişliğine oranlı hesaplandığı için slot ve kart boyutlarını elle
+düzeltmeye gerek yoktur.
+
+### Kart görselleri
+
+- Elle çizilmiş görseller `Assets/EcoSort/Art/CardIcons/` klasörüne konur;
+  **Eco-Sort > Kart Ikonlarini Bagla** menüsü dosya adına bakarak kartlara bağlar.
+- Görseli olmayan kartlar için `IconFactory` çalışma zamanında kategori renginde
+  bir kart yüzü üretir. **Eco-Sort > Eksik Kart Yuzlerini Uret (PNG)** menüsü
+  aynı yüzü PNG asset'i olarak diske yazar; sanatçı o dosyanın üzerine çizer.

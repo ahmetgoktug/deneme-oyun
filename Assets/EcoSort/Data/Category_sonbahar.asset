@@ -14,13 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CategoryData
   _categoryId: sonbahar
   _displayName: Sonbahar
+  _kind: 3
   _icon: {fileID: 0}
   _accentColor: {r: 0.85, g: 0.52, b: 0.22, a: 1}
+  _emblem: 3
   _requiredCardCount: 3
   _cards:
   - {fileID: 11400000, guid: f0ebef680a411c648a719d3bce340368, type: 2}
-  - {fileID: 11400000, guid: d1b6d71e71633e64a898f8b75d5f2cc1, type: 2}
   - {fileID: 11400000, guid: a2c675d4a9ce4b74ab67e3ca0a22c43f, type: 2}
+  - {fileID: 11400000, guid: d1b6d71e71633e64a898f8b75d5f2cc1, type: 2}
   _completeVfxPrefab: {fileID: 0}
   _cardAcceptedSfx: {fileID: 0}
   _completeSfx: {fileID: 0}

@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c633c6343621fbb4985d85b7d5f4e555, type: 3}
+  m_Name: Category_taki
+  m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CategoryData
+  _categoryId: taki
+  _displayName: Takı
+  _kind: 4
+  _icon: {fileID: 0}
+  _accentColor: {r: 0.63, g: 0.51, b: 0.8, a: 1}
+  _emblem: 12
+  _requiredCardCount: 3
+  _cards:
+  - {fileID: 11400000, guid: da03c5bf91614d5cb280a313f50e027a, type: 2}
+  - {fileID: 11400000, guid: 4c687cc1a2974d9788557a29a208b659, type: 2}
+  - {fileID: 11400000, guid: 56b4f9285cad48969b56600d431b007a, type: 2}
+  _completeVfxPrefab: {fileID: 0}
+  _cardAcceptedSfx: {fileID: 0}
+  _completeSfx: {fileID: 0}
+  _sfxVolume: 0.85
+  _completeMessage: Pırıltılı Takılar

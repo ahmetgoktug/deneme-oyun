@@ -14,13 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CategoryData
   _categoryId: deniz
   _displayName: Deniz
+  _kind: 1
   _icon: {fileID: 0}
   _accentColor: {r: 0.25, g: 0.6, b: 0.75, a: 1}
+  _emblem: 7
   _requiredCardCount: 3
   _cards:
-  - {fileID: 11400000, guid: 788fee70b96531b4ea4700c6ce27b8de, type: 2}
   - {fileID: 11400000, guid: 19c3b62c34b05e24aa021cc948f89a63, type: 2}
-  - {fileID: 11400000, guid: efa54084fbb61cb46a36d4af9187aa0a, type: 2}
+  - {fileID: 11400000, guid: 788fee70b96531b4ea4700c6ce27b8de, type: 2}
+  - {fileID: 11400000, guid: 6a98c0ab4bee49e48237f6c55050a470, type: 2}
   _completeVfxPrefab: {fileID: 0}
   _cardAcceptedSfx: {fileID: 0}
   _completeSfx: {fileID: 0}

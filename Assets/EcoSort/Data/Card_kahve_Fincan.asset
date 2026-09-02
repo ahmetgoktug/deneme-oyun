@@ -15,6 +15,8 @@ MonoBehaviour:
   _cardId: kahve_fincan
   _displayName: Fincan
   _artwork: {fileID: 21300000, guid: 5e1e281b2d317bf4ba18c19a22c53a6a, type: 3}
+  _iconShape: 2
   _tint: {r: 1, g: 1, b: 1, a: 1}
   _category: {fileID: 11400000, guid: acae216b01c84654c92d4f6a8c288ffd, type: 2}
+  _categoryKind: 2
   _hint: 

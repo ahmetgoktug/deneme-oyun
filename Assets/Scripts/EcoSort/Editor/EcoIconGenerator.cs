@@ -35,7 +35,16 @@ namespace EcoSort.EditorTools
 
             { "deniz_dalga", EcoIcon.Wave },
             { "deniz_denizkabugu", EcoIcon.Shell },
-            { "deniz_marti", EcoIcon.Bird }
+            { "deniz_marti", EcoIcon.Bird },
+            { "deniz_plajsemsiyesi", EcoIcon.Umbrella },
+
+            { "taki_kolye", EcoIcon.Necklace },
+            { "taki_bileklik", EcoIcon.Bracelet },
+            { "taki_yuzuk", EcoIcon.Ring },
+
+            { "oyun_oyunkolu", EcoIcon.Gamepad },
+            { "oyun_kulaklik", EcoIcon.Headphones },
+            { "oyun_klavye", EcoIcon.Keyboard }
         };
 
         [MenuItem("Eco-Sort/Ikonlari Uret ve Kartlara Ata")]

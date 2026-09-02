@@ -14,13 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CategoryData
   _categoryId: kahve
   _displayName: Kahve Keyfi
+  _kind: 2
   _icon: {fileID: 0}
   _accentColor: {r: 0.55, g: 0.38, b: 0.26, a: 1}
+  _emblem: 2
   _requiredCardCount: 3
   _cards:
   - {fileID: 11400000, guid: 83e72040d1dc4a644bd4b27465d667f9, type: 2}
-  - {fileID: 11400000, guid: b892d38e747e25e4db11f74b6d5909a9, type: 2}
   - {fileID: 11400000, guid: bd2929f4616db5d4eb7486de4ebc69f0, type: 2}
+  - {fileID: 11400000, guid: b892d38e747e25e4db11f74b6d5909a9, type: 2}
   _completeVfxPrefab: {fileID: 0}
   _cardAcceptedSfx: {fileID: 0}
   _completeSfx: {fileID: 0}

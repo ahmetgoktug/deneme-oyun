@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Card_kahve_KahveCekirdegi
   m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CardData
   _cardId: kahve_kahvecekirdegi
-  _displayName: Kahve Cekirdegi
+  _displayName: "Kahve \xC7ekirde\u011Fi"
   _artwork: {fileID: 21300000, guid: c952f28bc2c211f48861cbcda1e1cdca, type: 3}
+  _iconShape: 0
   _tint: {r: 1, g: 1, b: 1, a: 1}
   _category: {fileID: 11400000, guid: acae216b01c84654c92d4f6a8c288ffd, type: 2}
+  _categoryKind: 2
   _hint: 

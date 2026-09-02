@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c633c6343621fbb4985d85b7d5f4e555, type: 3}
+  m_Name: Category_oyun
+  m_EditorClassIdentifier: Assembly-CSharp::EcoSort.Data.CategoryData
+  _categoryId: oyun
+  _displayName: Oyun
+  _kind: 5
+  _icon: {fileID: 0}
+  _accentColor: {r: 0.91, g: 0.46, b: 0.44, a: 1}
+  _emblem: 13
+  _requiredCardCount: 3
+  _cards:
+  - {fileID: 11400000, guid: 2b1367e652d24bdea798dbeba9559b6b, type: 2}
+  - {fileID: 11400000, guid: 7b403af60ffc4223b0b5179bd97cfd3e, type: 2}
+  - {fileID: 11400000, guid: c3b72267e8314014a7ce4d49263b0444, type: 2}
+  _completeVfxPrefab: {fileID: 0}
+  _cardAcceptedSfx: {fileID: 0}
+  _completeSfx: {fileID: 0}
+  _sfxVolume: 0.85
+  _completeMessage: Oyun Zamanı
