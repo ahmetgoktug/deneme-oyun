@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace EcoSort.Core
 {
     /// <summary>
-    /// Ekranin ust seridindeki kategori slotlarini yoneten sinif.
+    /// Ekranin ust seridindeki "ana kart" slotlarini yoneten sinif.
     ///
     /// Sorumluluk ayrimi:
     ///   SlotManager      -> slot seridinin KURULUMU ve dis dunyaya acilan olaylar
@@ -20,8 +20,8 @@ namespace EcoSort.Core
     ///   1) Sahnede elle kurulmus slotlar: _slotRow altindaki CategorySlotView'lari toplar.
     ///   2) Proseduel: Build() cagrilirsa serit + slotlar calisma zamaninda uretilir.
     ///
-    /// Her iki durumda da serit bir <see cref="HorizontalLayoutGroup"/> ile hizalanir,
-    /// boylece 3 kategoriden 5 kategoriye cikildiginda hicbir olcu elle duzeltilmez.
+    /// Slotun gorunumu bir oyun kartidir: krem govde, tepesinde amber kategori
+    /// seridi, ortada soluk amblem, altta "1/3" sayaci.
     /// </summary>
     [DisallowMultipleComponent]
     public class SlotManager : MonoBehaviour
@@ -36,14 +36,14 @@ namespace EcoSort.Core
 
         [Header("Gorunum")]
         [Tooltip("Slotun yuksekliginin genisligine orani.")]
-        [SerializeField, Range(0.8f, 2f)] float _slotAspect = 1.72f;
+        [SerializeField, Range(0.8f, 2f)] float _slotAspect = 1.50f;
         [Tooltip("Slota giren kartin kucultulme orani.")]
-        [SerializeField, Range(0.15f, 1f)] float _acceptedCardScale = 0.38f;
+        [SerializeField, Range(0.15f, 1f)] float _acceptedCardScale = 0.52f;
 
         // ---------------------------------------------------------------- olaylar
 
         /// <summary>
-        /// Bir kategorinin 3/3 kartı toplandi. Istenen mimarideki
+        /// Bir kategorinin tum kartlari toplandi. Istenen mimarideki
         /// "OnCategoryCompleted" olayi budur.
         /// </summary>
         public event Action<CategoryData, CategorySlotView> OnCategoryCompleted;
@@ -51,7 +51,7 @@ namespace EcoSort.Core
         /// <summary>Ilerleme degisti. (slot, mevcut, gereken)</summary>
         public event Action<CategorySlotView, int, int> OnCategoryProgress;
 
-        /// <summary>Bes kategorinin tamami tamamlandi: bolum bitti.</summary>
+        /// <summary>Tum kategoriler tamamlandi: bolum bitti.</summary>
         public event Action OnAllCategoriesCompleted;
 
         // ---------------------------------------------------------------- ic durum
@@ -88,7 +88,7 @@ namespace EcoSort.Core
         /// Slot seridini kurar. _slotRow atanmissa oradaki mevcut slotlar toplanir,
         /// degilse serit ve slotlar proseduel olarak uretilir.
         /// </summary>
-        /// <param name="parent">Seridin ekleneceği kok (genelde SafeArea).</param>
+        /// <param name="parent">Seridin eklenecegi kok (genelde SafeArea).</param>
         /// <param name="rowWidth">Seridin toplam genisligi (piksel).</param>
         /// <param name="spacing">Slotlar arasi bosluk (piksel).</param>
         /// <returns>Kurulan seridin yuksekligi.</returns>
@@ -105,20 +105,26 @@ namespace EcoSort.Core
             if (_slotRow == null) _slotRow = CreateRow(parent, spacing);
             else CollectExistingSlots();
 
-            int count = Mathf.Max(1, _categories.Count);
-
-            // Slot genisligi seride sigacak sekilde hesaplanir; Layout Group
-            // hizalamayi yapar, biz sadece yuksekligi bildiririz.
-            float slotWidth = (rowWidth - spacing * (count - 1)) / count;
+            float slotWidth = MeasureSlotWidth(rowWidth, spacing);
             float slotHeight = slotWidth * _slotAspect;
 
-            if (_slots.Count == 0) BuildSlots(slotWidth, slotHeight, spacing);
+            if (_slots.Count == 0) BuildSlots(slotWidth, slotHeight);
             else ApplyLayoutToExistingSlots(slotWidth, slotHeight);
 
             _slotRow.sizeDelta = new Vector2(rowWidth, slotHeight);
 
             Subscribe();
             return slotHeight;
+        }
+
+        /// <summary>
+        /// Bir slotun genisligi. Alt sutunlar bunu sorup kendilerini ayni
+        /// genislige ayarlar; slot ile altindaki deste birebir hizali kalir.
+        /// </summary>
+        public float MeasureSlotWidth(float rowWidth, float spacing)
+        {
+            int count = Mathf.Max(1, _categories.Count);
+            return (rowWidth - spacing * (count - 1)) / count;
         }
 
         RectTransform CreateRow(RectTransform parent, float spacing)
@@ -167,111 +173,123 @@ namespace EcoSort.Core
         static Vector2 StackOffset(float slotWidth)
         {
             // Kartlar slotun icinde hafif bir yelpaze olusturur.
-            return new Vector2(slotWidth * 0.20f, -slotWidth * 0.05f);
+            return new Vector2(slotWidth * 0.15f, -slotWidth * 0.02f);
         }
 
         // ---------------------------------------------------------------- slot uretimi
 
-        void BuildSlots(float slotWidth, float slotHeight, float spacing)
+        /// <summary>
+        /// Tek bir "ana kart" uretir:
+        ///
+        ///   Slot            yumusak golge (birakma hedefi)
+        ///     +- Body       krem kart govdesi
+        ///     |    +- Tint      kategori renginde cok soluk katman
+        ///     |    +- Glow      tamamlanma parlamasi
+        ///     |    +- Tab       amber baslik seridi
+        ///     |    +- Emblem    filigran amblem
+        ///     |    +- CountPill "0/3" sayaci
+        ///     +- CardsRoot  kabul edilen kartlar (govdenin ustunde)
+        ///     +- CompleteBadge
+        ///
+        /// Govdenin kendisi krem kalir; kategori rengi ayri bir katmanda durur.
+        /// Boylece CategorySlotView ilerlemeye gore o katmanin alfasini degistirse
+        /// bile kartin krem kimligi bozulmaz.
+        /// </summary>
+        void BuildSlots(float slotWidth, float slotHeight)
         {
-            int cornerRadius = Mathf.RoundToInt(slotWidth * 0.20f);
+            int cornerRadius = Mathf.RoundToInt(slotWidth * 0.15f);
 
             foreach (var category in _categories)
             {
                 if (category == null) continue;
 
-                // --- slot govdesi (Layout Group'un dogrudan cocugu)
-                var slotRect = EcoUi.Rect($"Slot_{category.CategoryId}", _slotRow,
+                // --- kok: yumusak golge. Kart mor zeminden kalkmis gorunsun diye
+                // golge koke, krem govde ise onun cocuguna cizilir.
+                var slotRect = EcoUi.Rect("Slot_" + category.CategoryId, _slotRow,
                     new Vector2(slotWidth, slotHeight));
 
-                var background = slotRect.gameObject.AddComponent<Image>();
-                background.sprite = UiSpriteFactory.Rounded(cornerRadius);
-                background.type = Image.Type.Sliced;
-                background.color = category.AccentColor.WithAlpha(0.18f);
-                background.raycastTarget = true;   // birakma hedefi
+                var shadow = slotRect.gameObject.AddComponent<Image>();
+                shadow.sprite = UiSpriteFactory.Shadow(cornerRadius, Mathf.RoundToInt(slotWidth * 0.08f));
+                shadow.type = Image.Type.Sliced;
+                shadow.color = EcoPalette.Shadow;
+                shadow.raycastTarget = true;   // birakma hedefi
 
                 EcoUi.FixedSize(slotRect, slotWidth, slotHeight);
 
-                // --- tamamlanma parlamasi (govdenin hemen ustunde)
-                var glow = EcoUi.Panel("Glow", slotRect, new Vector2(slotWidth, slotHeight),
-                    cornerRadius, category.AccentColor);
+                var slotSize = new Vector2(slotWidth, slotHeight);
+                var body = EcoUi.Panel("Body", slotRect, slotSize, cornerRadius, EcoPalette.CardFace);
+                body.rectTransform.anchoredPosition = new Vector2(0f, slotHeight * 0.015f);
+
+                var bodyRect = body.rectTransform;
+
+                // --- kategori tonu
+                var tint = EcoUi.Panel("Tint", bodyRect, slotSize,
+                    cornerRadius, category.AccentColor.WithAlpha(0.18f));
+
+                // --- tamamlanma parlamasi
+                var glow = EcoUi.Panel("Glow", bodyRect, slotSize, cornerRadius, category.AccentColor);
                 glow.gameObject.AddComponent<CanvasGroup>().alpha = 0f;
                 glow.gameObject.SetActive(false);
 
-                // --- kategori amblemi: soluk bir filigran
+                // --- amber baslik seridi (referanstaki sari sekme)
+                float tabHeight = slotHeight * 0.16f;
+                var tab = EcoUi.Panel("Tab", bodyRect,
+                    new Vector2(slotWidth * 0.88f, tabHeight),
+                    Mathf.RoundToInt(tabHeight * 0.42f), EcoPalette.Tab);
+                tab.rectTransform.anchoredPosition =
+                    new Vector2(0f, slotHeight * 0.5f - tabHeight * 0.80f);
+
+                var title = EcoUi.Label("Title_" + category.CategoryId, tab.rectTransform,
+                    new Vector2(slotWidth * 0.80f, tabHeight),
+                    Mathf.RoundToInt(slotWidth * 0.115f), EcoPalette.TabInk, FontStyle.Bold);
+                title.text = category.DisplayName;
+                _titles[category] = title;
+
+                // --- amblem: kartin ortasinda filigran
                 var emblemSprite = category.Icon != null
                     ? category.Icon
                     : IconFactory.GetSprite(category.Emblem);
 
-                var emblem = EcoUi.Icon("Emblem", slotRect, Vector2.one * (slotWidth * 0.52f),
-                    emblemSprite, category.AccentColor.WithAlpha(0.30f));
-                emblem.rectTransform.anchoredPosition = new Vector2(0f, slotHeight * 0.06f);
+                var emblem = EcoUi.Icon("Emblem", bodyRect, Vector2.one * (slotWidth * 0.62f),
+                    emblemSprite, category.AccentColor.WithAlpha(0.48f));
+                emblem.rectTransform.anchoredPosition = new Vector2(0f, -slotHeight * 0.02f);
 
-                // --- baslik
-                var title = EcoUi.Label($"Title_{category.CategoryId}", slotRect,
-                    new Vector2(slotWidth * 0.94f, slotHeight * 0.22f),
-                    Mathf.RoundToInt(slotWidth * 0.155f), EcoPalette.Ink, FontStyle.Bold);
-                title.text = category.DisplayName;
-                title.rectTransform.anchoredPosition = new Vector2(0f, slotHeight * 0.36f);
-                _titles[category] = title;
+                // --- sayac: "0/3"
+                float countHeight = slotHeight * 0.145f;
+                var countPill = EcoUi.Panel("CountPill", bodyRect,
+                    new Vector2(slotWidth * 0.46f, countHeight),
+                    Mathf.RoundToInt(countHeight * 0.5f), category.AccentColor.WithAlpha(0.24f));
+                countPill.rectTransform.anchoredPosition =
+                    new Vector2(0f, -slotHeight * 0.5f + countHeight * 0.85f);
 
-                // --- ilerleme noktalari (ikinci bir Horizontal Layout Group)
-                var pips = BuildPips(slotRect, category, slotWidth, slotHeight);
+                var count = EcoUi.Label("Count", countPill.rectTransform,
+                    new Vector2(slotWidth * 0.46f, countHeight),
+                    Mathf.RoundToInt(slotWidth * 0.115f), EcoPalette.Ink, FontStyle.Bold);
+                count.text = "0/" + category.RequiredCardCount;
 
                 // --- kabul edilen kartlarin kutusu (en ustte cizilsin diye en son)
                 var cardsRoot = EcoUi.Rect("CardsRoot", slotRect, new Vector2(slotWidth, slotHeight));
-                cardsRoot.anchoredPosition = new Vector2(0f, slotHeight * 0.02f);
+                cardsRoot.anchoredPosition = new Vector2(0f, -slotHeight * 0.02f);
 
                 // --- tamamlandi rozeti
-                // Rozet slotun ORTASINDA durur: kartlar temizlenince bosalan alani doldurur
-                // ve baslikla cakismaz.
-                var badge = EcoUi.Icon("CompleteBadge", slotRect, Vector2.one * (slotWidth * 0.46f),
+                var badge = EcoUi.Icon("CompleteBadge", slotRect, Vector2.one * (slotWidth * 0.44f),
                     IconFactory.GetSprite(EcoIcon.Sparkle), EcoPalette.Success);
-                badge.rectTransform.anchoredPosition = new Vector2(0f, slotHeight * 0.04f);
+                badge.rectTransform.anchoredPosition = new Vector2(0f, -slotHeight * 0.02f);
                 badge.rectTransform.localScale = Vector3.zero;
                 badge.gameObject.SetActive(false);
 
                 // --- davranis
                 var slot = slotRect.gameObject.AddComponent<CategorySlotView>();
-                slot.ConfigureVisuals(background, glow, cardsRoot, emblem, badge);
+                slot.ConfigureVisuals(tint, glow, cardsRoot, emblem, badge);
                 slot.ConfigureLayout(StackOffset(slotWidth), 3.5f, _acceptedCardScale);
                 slot.Bind(category);
-                slot.ConfigurePips(pips);
+                slot.ConfigureProgressLabel(count);
 
                 _slots.Add(slot);
             }
         }
 
-        List<Image> BuildPips(RectTransform slotRect, CategoryData category, float slotWidth, float slotHeight)
-        {
-            float pipSize = slotWidth * 0.11f;
-            float pipSpacing = slotWidth * 0.06f;
-            int required = category.RequiredCardCount;
-
-            var row = EcoUi.Rect("Pips", slotRect,
-                new Vector2(pipSize * required + pipSpacing * (required - 1), pipSize));
-            row.anchoredPosition = new Vector2(0f, -slotHeight * 0.36f);
-
-            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = pipSpacing;
-            layout.childAlignment = TextAnchor.MiddleCenter;
-            layout.childControlWidth = false;
-            layout.childControlHeight = false;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-
-            var pips = new List<Image>(required);
-            for (int i = 0; i < required; i++)
-            {
-                var pip = EcoUi.Disc($"Pip_{i}", row, pipSize, category.AccentColor.WithAlpha(0.22f));
-                EcoUi.FixedSize(pip.rectTransform, pipSize, pipSize);
-                pips.Add(pip);
-            }
-
-            return pips;
-        }
-
-        // ---------------------------------------------------------------- olay kopruSU
+        // ---------------------------------------------------------------- olay koprusu
 
         void Subscribe()
         {

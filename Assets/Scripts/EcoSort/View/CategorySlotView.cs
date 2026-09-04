@@ -36,6 +36,8 @@ namespace EcoSort.View
         [SerializeField] Image _glowImage;
         [SerializeField] TMP_Text _titleLabel;
         [SerializeField] TMP_Text _progressLabel;
+        [Tooltip("Ilerleme sayaci (\"1/3\"). TMP kurulu degilken kullanilan eski Text surumu.")]
+        [SerializeField] Text _progressText;
 
         [Tooltip("Kabul edilen kartlarin tasinacagi kok. Bos ise slotun kendisi kullanilir.")]
         [SerializeField] RectTransform _cardsRoot;
@@ -119,6 +121,13 @@ namespace EcoSort.View
             _completeBadge = completeBadge;
         }
 
+        /// <summary>Ilerleme sayacini baglar (proseduel kurucu TMP yerine eski Text kullanir).</summary>
+        public void ConfigureProgressLabel(Text label)
+        {
+            _progressText = label;
+            UpdateProgressVisuals();
+        }
+
         /// <summary>Ilerleme noktalarini (pip) baglar. Sayilari Required kadar olmali.</summary>
         public void ConfigurePips(IEnumerable<Image> pips)
         {
@@ -177,8 +186,14 @@ namespace EcoSort.View
         {
             if (_category == null) return;
 
+            // Tamamlanan grupta kartlar silinir; sayac yine de dolu gorunmeli.
+            int shown = _cleared ? _category.RequiredCardCount : _cards.Count;
+
             if (_progressLabel != null)
-                _progressLabel.text = $"{_cards.Count}/{_category.RequiredCardCount}";
+                _progressLabel.text = $"{shown}/{_category.RequiredCardCount}";
+
+            if (_progressText != null)
+                _progressText.text = $"{shown}/{_category.RequiredCardCount}";
 
             // Pip'ler: dolu olanlar kategori renginde, bos olanlar soluk.
             // Tamamlanan kategoride kartlar silinse de pip'ler dolu KALIR;

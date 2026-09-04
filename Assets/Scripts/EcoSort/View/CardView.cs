@@ -65,8 +65,9 @@ namespace EcoSort.View
         [Header("Durum")]
         [SerializeField] bool _faceUp = true;
         [SerializeField] bool _interactable = true;
-        [Tooltip("Acikken tek dokunus karti kendi kategorisinin slotuna ucurur (mobil konfor).")]
-        [SerializeField] bool _tapToPlay = true;
+        [Tooltip("Acikken tek dokunus karti kendi kategorisinin slotuna ucurur. Kapali: " +
+                 "kart yalnizca surukleyerek oynanir, dokunmak bir sey yapmaz.")]
+        [SerializeField] bool _tapToPlay;
 
         // ---------------------------------------------------------------- olaylar
 
@@ -216,6 +217,12 @@ namespace EcoSort.View
         {
             _baseScale = Vector3.one * Mathf.Max(0.01f, scale);
         }
+
+        /// <summary>
+        /// Tek dokunusla oynamayi acar/kapatir. Kapaliyken kart sadece
+        /// surukleyerek oynanir; dokunmak yalnizca <see cref="Tapped"/> yayinlar.
+        /// </summary>
+        public void SetTapToPlay(bool value) => _tapToPlay = value;
 
         /// <summary>
         /// Karti oynanabilir/oynanamaz yapar. Oynanamaz kart raycast'i da birakir:

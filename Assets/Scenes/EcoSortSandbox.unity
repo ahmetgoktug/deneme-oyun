@@ -340,8 +340,14 @@ MonoBehaviour:
   _paddingRatio: 0.04
   _gapRatio: 0.02
   _cardColumns: 4
+  _revealRatio: 0.22
+  _maxRevealRatio: 0.3
+  _faceUpPerColumn: 1
   _showCardNames: 1
   _iconHasOwnBackdrop: 0
+  _tapToPlay: 0
+  _botanicalFrame: 1
+  _hintCount: 3
   _shuffle: 1
   _randomSeed: 0
 --- !u!114 &1307349728

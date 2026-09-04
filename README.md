@@ -116,7 +116,7 @@ tek yönlü konuşur: **View kural bilmez, Core görsel bilmez.**
 |---|---|---|
 | `Data/` | `CardData`, `CategoryData`, `CategoryKind` | ScriptableObject içerik. Kod değişmeden kart/kategori eklenir. |
 | `Core/` | `CategoryManager`, `SlotManager`, `SandboxBoard` | Kural motoru, slot şeridi, ekran kurulumu. |
-| `View/` | `CardView`, `CategorySlotView`, `CardTray`, `SafeAreaFitter` | Sürükle-bırak, animasyon, dokunsal geri bildirim. |
+| `View/` | `CardView`, `CategorySlotView`, `CardTray`, `BotanicalFrame`, `SafeAreaFitter` | Sürükle-bırak, kapalı/açık yüz, animasyon, dekor, dokunsal geri bildirim. |
 | `Utils/` | `EcoUi`, `EcoTween`, `EcoPalette`, `IconFactory`, `UiSpriteFactory`, `EcoConfetti`, `EcoAudio` | Asset gerektirmeyen görsel/ses altyapısı. |
 
 ### Ekran düzeni
@@ -125,17 +125,56 @@ Pano `SandboxBoard` tarafından çalışma zamanında kurulur (prefab yok):
 
 ```
 Canvas (Screen Space - Overlay, CanvasScaler 1080x1920, Match = Width)
- ├─ Background   gradyan + radyal ışık + soluk dekor daireler
+ ├─ Background   mor/lila gradyan + radyal ışık + soluk dekor daireler
+ │   └─ Botanical_Back    kenar sarmaşıkları, çiçekler, pırıltı (oyunun arkasında)
  ├─ SafeArea     SafeAreaFitter (çentik/gesture çubuğu)
- │   ├─ Title / Status / CounterPill
- │   ├─ SlotRow      HorizontalLayoutGroup → 5 kategori slotu
- │   └─ CardTray     VerticalLayoutGroup → satırlar → HorizontalLayoutGroup → 15 kart yuvası
+ │   ├─ TopBar      başlık + kategori tikleri + "0/5" hapı
+ │   ├─ Status      tek satırlık yönlendirme metni
+ │   ├─ SlotRow     ANA KARTLAR → HorizontalLayoutGroup, kategori başına bir kart
+ │   ├─ CardTray    KAPALI DESTELER → üst üste yığılmış kart sütunları
+ │   └─ BottomBar   hamle sayacı · ipucu düğmesi · kombo göstergesi
+ ├─ Botanical_Front  köşe yaprakları (oyunun önünde, soluk)
  └─ DragLayer    sürüklenen kart, konfeti ve bitiş banner'ı
 ```
 
+Üstteki her **ana kart** bir kategoriyi temsil eder: krem gövde, tepesinde amber
+başlık şeridi, ortada amblem, altta `1/3` sayacı.
+
+**Kapalı yüz akışı:** Her destede yalnızca en alttaki kart açıktır ve
+sürüklenebilir. O kart bir kategoriye gidince `CardTray` bunu
+`CategoryManager.CardAccepted` üzerinden duyar, kartı destesinden düşürür ve
+üstünde kalan kartı çevirir. Deste aşağıdan yukarı erir; sütunların üst hizası
+hiç değişmez. Kartlar kategoriye göre değil karışık dağıtılır, yani bir sütun
+tek başına bir kategoriyi çözmez.
+
+**Zorluk ayarı:** Deste sayısı `_cardColumns` ile verilir. Ana kart sayısına
+eşitlenirse (veya 0 bırakılırsa) desteler slotlarla birebir hizalanır; azaltmak
+desteleri derinleştirir, aynı anda daha az kart açık kalır ve oyun zorlaşır.
+`_revealRatio` kartların ne kadar üst üste bineceğini belirler — küçük değer
+daha çok kartı gizler.
+
+**Girdi:** Kart yalnızca **sürükleyerek** oynanır. Tek dokunuşla otomatik
+yerleştirme `CardView._tapToPlay` ile kapalıdır (`SandboxBoard._tapToPlay`
+üzerinden verilir); dokunmak sadece `Tapped` olayını yayınlar.
+
+**Botanik dekor:** `BotanicalFrame` iki kenardan yükselen sarmaşıkları, üstlerindeki
+yaprak ve çiçekleri, artı zemine dağılmış pırıltıyı prosedürel üretir — sanat
+asseti gerekmez. Salınım tek bir `Update` döngüsünde, her parça kendi faziyle
+yürür. Dekorun tamamı raycast geçirmez; hiçbir dokunuşu yutmaz.
+
 **Neden kartlar Layout Group'un doğrudan çocuğu değil:** Layout Group her karede
 `anchoredPosition`'ı geri yazar ve sürükleme/geri dönüş animasyonlarını bozar.
-Bu yüzden layout boş *yuvaları* hizalar, kart ise yuvanın çocuğudur.
+Bu yüzden kart, konumu sabit bir *yuvanın* (socket) çocuğudur.
+
+**Dikey boşluk:** Bloklar önce ölçülür, sonra yerleştirilir; artan boşluk
+aralara eşit dağıtılır. Destelerin ne kadar açılacağı da (`_revealRatio` ile
+`_maxRevealRatio` arasında) kalan alana göre seçilir — az kartla deste açılır,
+kart sayısı artınca kendiliğinden sıkışır.
+
+**Renk uyarısı:** Proje Linear renk uzayında. Renkleri doku içine *pişirmeyin*
+(ham sRGB baytları ekranda soluk çıkar); `Image.color` üzerinden verin. Zemin
+gradyanı bu yüzden "düz koyu renk + alfası azalan açık katman" olarak kurulur
+(`UiSpriteFactory.VerticalFade`).
 
 ### Eşleşme akışı
 

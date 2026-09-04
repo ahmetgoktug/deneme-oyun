@@ -97,6 +97,41 @@ namespace EcoSort.Utils
             return sprite;
         }
 
+        /// <summary>
+        /// Yukaridan asagi saydamlasan beyaz katman. Rengi Image.color'dan alir.
+        ///
+        /// Neden <see cref="VerticalGradient"/> yerine bu: renkleri dokunun icine
+        /// pisirmek Linear renk uzayinda yanlis sonuc verir (doku ham sRGB baytlarini
+        /// tasir, ekranda soluk gorunur). Alfa tasiyip rengi Image.color'dan almak
+        /// her iki renk uzayinda da dogru calisir.
+        /// </summary>
+        public static Sprite VerticalFade(int height = 256)
+        {
+            height = Mathf.Clamp(height, 8, 1024);
+            string key = "fade_" + height;
+            if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            var texture = NewTexture(4, height);
+            var pixels = new Color32[4 * height];
+
+            for (int y = 0; y < height; y++)
+            {
+                // Ustte tam opak, altta tam saydam.
+                byte a = (byte)Mathf.RoundToInt(y / (float)(height - 1) * 255f);
+                for (int x = 0; x < 4; x++) pixels[y * 4 + x] = new Color32(255, 255, 255, a);
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+
+            var sprite = Sprite.Create(texture, new Rect(0, 0, 4, height), new Vector2(0.5f, 0.5f),
+                100f, 0, SpriteMeshType.FullRect);
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+
+            Cache[key] = sprite;
+            return sprite;
+        }
+
         /// <summary>Dikey gradyan zemin. Image.type = Simple, stretch ile kullan.</summary>
         public static Sprite VerticalGradient(Color bottom, Color top, int height = 256)
         {
@@ -119,6 +154,46 @@ namespace EcoSort.Utils
             var sprite = Sprite.Create(texture, new Rect(0, 0, 4, height), new Vector2(0.5f, 0.5f),
                 100f, 0, SpriteMeshType.FullRect);
             sprite.hideFlags = HideFlags.HideAndDontSave;
+
+            Cache[key] = sprite;
+            return sprite;
+        }
+
+
+        /// <summary>
+        /// Kapali kart sirtindaki baklava (argyle) deseni. Yuvarlak kose maskesi
+        /// sprite'in icine pisirilir; ustteki desen kartin kosesinden tasmaz.
+        /// </summary>
+        /// <param name="size">Doku kenari (piksel).</param>
+        /// <param name="cells">Bir kenara dusen baklava sayisi.</param>
+        /// <param name="radius">Kose yuvarlatma yaricapi.</param>
+        public static Sprite DiamondLattice(int size = 128, int cells = 4, int radius = 14)
+        {
+            size = Mathf.Clamp(size, 16, 512);
+            cells = Mathf.Clamp(cells, 1, 16);
+            radius = Mathf.Clamp(radius, 0, size / 2);
+
+            string key = "lattice_" + size + "_" + cells + "_" + radius;
+            if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            float cell = size / (float)cells;
+
+            var sprite = Build(size, (px, py, half) =>
+            {
+                // Once kart formunun maskesi: desen kosede kesilsin.
+                float mask = Mathf.Clamp01(0.5f - RoundedBoxDistance(px, py, half, half, radius));
+                if (mask <= 0.001f) return 0f;
+
+                // Hucre icinde merkeze gore konum: |u| + |v| bir baklava verir.
+                float u = Mathf.Repeat((px + half) / cell, 1f) - 0.5f;
+                float v = Mathf.Repeat((py + half) / cell, 1f) - 0.5f;
+
+                // Kenari bir piksele yayarak yumusat.
+                float d = (Mathf.Abs(u) + Mathf.Abs(v) - 0.34f) * cell;
+                float a = Mathf.Clamp01(0.5f - d);
+
+                return a * mask;
+            }, 0);
 
             Cache[key] = sprite;
             return sprite;

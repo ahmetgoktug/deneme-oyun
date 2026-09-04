@@ -84,6 +84,34 @@ namespace EcoSort.Utils
             return image;
         }
 
+        /// <summary>
+        /// Kapali kart yuzu: ince acik cerceve + koyu ic zemin + baklava deseni.
+        /// Kartin govdesiyle ayni olcude uretilir ve govdenin USTUNDE cizilmesi icin
+        /// ondan sonra eklenmelidir.
+        /// </summary>
+        public static RectTransform CardBack(string name, Transform parent, Vector2 size)
+        {
+            int radius = Mathf.RoundToInt(size.x * 0.15f);
+
+            var frame = Panel(name, parent, size, radius, EcoPalette.CardBackFrame);
+
+            // Ic zemin: cerceveyi ince bir kenar olarak birakacak kadar iceride.
+            float inset = size.x * 0.055f;
+            var innerSize = new Vector2(size.x - inset * 2f, size.y - inset * 2f);
+            int innerRadius = Mathf.RoundToInt(radius * 0.78f);
+            var inner = Panel("BackInner", frame.rectTransform, innerSize, innerRadius,
+                EcoPalette.CardBackDeep);
+
+            // Desen ic zeminle ayni formda: kose maskesi sprite'in icinde pisirilmis
+            // oldugu icin tasma olmaz.
+            var pattern = Icon("BackPattern", inner.rectTransform, innerSize,
+                UiSpriteFactory.DiamondLattice(128, 4, Mathf.RoundToInt(128f * innerRadius / innerSize.x)),
+                EcoPalette.CardBackLight.WithAlpha(0.55f));
+            pattern.preserveAspect = false;
+
+            return frame.rectTransform;
+        }
+
         /// <summary>Gomulu fontla metin. TMP bagimliligi olmadan calisir.</summary>
         public static Text Label(string name, Transform parent, Vector2 size, int fontSize,
             Color color, FontStyle style = FontStyle.Normal,
